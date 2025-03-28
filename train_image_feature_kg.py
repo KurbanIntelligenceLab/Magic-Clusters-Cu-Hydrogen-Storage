@@ -12,7 +12,7 @@ materials_to_test = ['Cu_R7_optimized', 'Cu_R8_optimized', 'Cu_R9_optimized', 'C
 seed = 42
 num_of_folds = 3
 batch_size = 48
-num_epochs = 100
+num_epochs = 5
 main_experiment_dir = 'results/image_feature_kg'
 project_name = 'hydrogen_storage_knowledge_graph_experiments'
 
@@ -123,7 +123,7 @@ for material in materials_to_test:
         
         training_duration = time.time() - start_time
         
-        model.load_state_dict(torch.load(best_model_path, weights_only=False))
+        model.load_state_dict(torch.load(best_model_path, map_location=device, weights_only=False))
         model.eval()
         running_test_loss = 0.0
         with torch.no_grad():
@@ -139,7 +139,10 @@ for material in materials_to_test:
         print(f"Test Loss: {test_loss:.4f}")
         print(f"Training Duration (seconds): {training_duration:.2f}")
         
+        # Log test loss and training duration, and add them to the summary
         wandb.log({"test_loss": test_loss, "training_duration": training_duration})
+        wandb.run.summary["test_loss"] = test_loss
+        wandb.run.summary["training_duration"] = training_duration
         
         results = {
             "train_losses": train_losses,

@@ -5,12 +5,15 @@ import torchvision.models as models
 class MultimodalModel(nn.Module):
     def __init__(self, num_graph_features, num_graph_outputs, num_outputs=1, hidden_dimension=128, dropout_rate=0.3):
         super(MultimodalModel, self).__init__()
-        
-        # Image branch: Use pretrained ResNet-101
-        self.cnn = models.resnet101(weights=models.ResNet101_Weights.IMAGENET1K_V2)
-        # Remove the final classification layer to get feature embeddings
+        self.cnn = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2)
+        # self.cnn.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+        # with torch.no_grad():
+        #     original_weights = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V2).conv1.weight
+        #     self.cnn.conv1.weight = nn.Parameter(original_weights.mean(dim=1, keepdim=True))
+
         self.cnn.fc = nn.Identity()
-        cnn_out_features = 2048  # For ResNet-101
+        cnn_out_features = 2048  # For ResNet-50
         
         # Graph branch: Simple fully connected network for material features
         self.graph_fc = nn.Sequential(
