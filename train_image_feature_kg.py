@@ -14,7 +14,7 @@ num_of_folds = 3
 batch_size = 48
 num_epochs = 100
 main_experiment_dir = 'results/image_feature_kg'
-project_name = 'image_feature_kg_experiments'
+project_name = 'hydrogen_storage_knowledge_graph_experiments'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -26,7 +26,7 @@ config = {
     "num_epochs": num_epochs,
     "optimizer": "Adam",
     "optimizer_params": {
-         "lr": 1e-4,
+         "lr": 1e-3,
          "weight_decay": 0
     },
     "lr_scheduler": {
