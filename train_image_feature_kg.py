@@ -6,15 +6,36 @@ import torch.nn as nn
 import torch.optim as optim
 from dataloader_feautre_kg_only import create_data_generator
 from model import MultimodalModel
+import wandb
 
 materials_to_test = ['Cu_R7_optimized', 'Cu_R8_optimized', 'Cu_R9_optimized', 'Cu_R10_optimized']
 seed = 42
 num_of_folds = 3
-batch_size = 128
-num_epochs = 10
+batch_size = 48
+num_epochs = 100
 main_experiment_dir = 'results/image_feature_kg'
+project_name = 'image_feature_kg_experiments'
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+config = {
+    "materials_to_test": materials_to_test,
+    "seed": seed,
+    "num_of_folds": num_of_folds,
+    "batch_size": batch_size,
+    "num_epochs": num_epochs,
+    "optimizer": "Adam",
+    "optimizer_params": {
+         "lr": 1e-4,
+         "weight_decay": 0
+    },
+    "lr_scheduler": {
+         "step_size": 10,
+         "gamma": 0.1
+    },
+    "dropout_rate": 0.2,
+    "project_name": project_name
+}
 
 for material in materials_to_test:
     print(f"\nProcessing material: {material}")
@@ -24,17 +45,27 @@ for material in materials_to_test:
     for fold, (train_loader, val_loader) in enumerate(fold_loaders, start=1):
         print(f"\nMaterial: {material} | Fold: {fold}/{num_of_folds}")
         
+        exp_dir = os.path.join(main_experiment_dir, material, str(fold))
+        os.makedirs(exp_dir, exist_ok=True)
+        
+        run_config = config.copy()
+        run_config.update({"material": material, "fold": fold})
+        
+        wandb.init(project=project_name, config=run_config, reinit=True)
+        
         sample = train_loader.dataset[0]
         num_graph_features = sample['features'].shape[0]
         
-        model = MultimodalModel(num_graph_features=num_graph_features, num_graph_outputs=4, num_outputs=1).to(device)
-        
+        model = MultimodalModel(num_graph_features=num_graph_features, num_graph_outputs=4, num_outputs=1, dropout_rate=run_config["dropout_rate"]).to(device)
         criterion = nn.MSELoss()
-        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        
+        optimizer = optim.Adam(model.parameters(), **run_config["optimizer_params"])
+        lr_scheduler = optim.lr_scheduler.StepLR(optimizer,
+                                                 step_size=run_config["lr_scheduler"]["step_size"],
+                                                 gamma=run_config["lr_scheduler"]["gamma"])
         
         best_val_loss = float('inf')
-        best_model_path = f"{main_experiment_dir}/{material}/{fold}/best_model.pt"
-        os.makedirs(os.path.dirname(best_model_path), exist_ok=True)
+        best_model_path = os.path.join(exp_dir, "best_model.pt")
         train_losses = []
         val_losses = []
         
@@ -72,16 +103,27 @@ for material in materials_to_test:
             epoch_val_loss = running_val_loss / len(val_loader.dataset)
             val_losses.append(epoch_val_loss)
             
-            print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {epoch_train_loss:.4f} - Val Loss: {epoch_val_loss:.4f}")
+            lr_scheduler.step()
+            current_lr = optimizer.param_groups[0]['lr']
+            
+            print(f"Epoch {epoch+1}/{num_epochs} - Train Loss: {epoch_train_loss:.4f} - Val Loss: {epoch_val_loss:.4f} - LR: {current_lr:.6f}")
+            
+            wandb.log({
+                "epoch": epoch+1,
+                "train_loss": epoch_train_loss,
+                "val_loss": epoch_val_loss,
+                "lr": current_lr
+            })
             
             if epoch_val_loss < best_val_loss:
                 best_val_loss = epoch_val_loss
                 torch.save(model.state_dict(), best_model_path)
+                wandb.run.summary["best_val_loss"] = best_val_loss
                 print("  Best model saved.")
         
         training_duration = time.time() - start_time
         
-        model.load_state_dict(torch.load(best_model_path))
+        model.load_state_dict(torch.load(best_model_path, weights_only=False))
         model.eval()
         running_test_loss = 0.0
         with torch.no_grad():
@@ -97,6 +139,8 @@ for material in materials_to_test:
         print(f"Test Loss: {test_loss:.4f}")
         print(f"Training Duration (seconds): {training_duration:.2f}")
         
+        wandb.log({"test_loss": test_loss, "training_duration": training_duration})
+        
         results = {
             "train_losses": train_losses,
             "val_losses": val_losses,
@@ -104,8 +148,9 @@ for material in materials_to_test:
             "training_duration": training_duration
         }
         
-        results_path = f"{main_experiment_dir}/{material}/{fold}/results.json"
-        os.makedirs(os.path.dirname(results_path), exist_ok=True)
+        results_path = os.path.join(exp_dir, "results.json")
         with open(results_path, 'w') as f:
             json.dump(results, f, indent=2)
         print(f"Results saved to {results_path}")
+        
+        wandb.finish()
