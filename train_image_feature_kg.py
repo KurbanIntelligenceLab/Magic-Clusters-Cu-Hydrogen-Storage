@@ -12,7 +12,7 @@ materials_to_test = ['Cu_R7_optimized', 'Cu_R8_optimized', 'Cu_R9_optimized', 'C
 seed = 42
 num_of_folds = 3
 batch_size = 48
-num_epochs = 5
+num_epochs = 100
 main_experiment_dir = 'results/image_feature_kg'
 project_name = 'hydrogen_storage_knowledge_graph_experiments'
 
@@ -30,7 +30,7 @@ config = {
          "weight_decay": 0
     },
     "lr_scheduler": {
-         "step_size": 10,
+         "step_size": 15,
          "gamma": 0.1
     },
     "dropout_rate": 0.2,
