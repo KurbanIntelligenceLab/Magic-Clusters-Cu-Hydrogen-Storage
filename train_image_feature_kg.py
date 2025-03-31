@@ -11,7 +11,7 @@ import wandb
 materials_to_test = ['Cu_R7_optimized', 'Cu_R8_optimized', 'Cu_R9_optimized', 'Cu_R10_optimized']
 seed = 42
 num_of_folds = 3
-batch_size = 48
+batch_size = 32
 num_epochs = 100
 main_experiment_dir = 'results/image_feature_kg'
 project_name = 'hydrogen_storage_knowledge_graph_experiments'
@@ -30,10 +30,10 @@ config = {
          "weight_decay": 0
     },
     "lr_scheduler": {
-         "step_size": 15,
+         "step_size": 50,
          "gamma": 0.1
     },
-    "dropout_rate": 0.2,
+    "dropout_rate": 0.50,
     "project_name": project_name
 }
 
@@ -56,7 +56,7 @@ for material in materials_to_test:
         sample = train_loader.dataset[0]
         num_graph_features = sample['features'].shape[0]
         
-        model = MultimodalModel(num_graph_features=num_graph_features, num_graph_outputs=4, num_outputs=1, dropout_rate=run_config["dropout_rate"]).to(device)
+        model = MultimodalModel(num_graph_features=num_graph_features, num_graph_outputs=1, num_outputs=1, dropout_rate=run_config["dropout_rate"]).to(device)
         criterion = nn.MSELoss()
         
         optimizer = optim.Adam(model.parameters(), **run_config["optimizer_params"])
@@ -112,7 +112,7 @@ for material in materials_to_test:
                 "epoch": epoch+1,
                 "train_loss": epoch_train_loss,
                 "val_loss": epoch_val_loss,
-                "lr": current_lr
+                "lr": current_lr,
             })
             
             if epoch_val_loss < best_val_loss:
@@ -125,6 +125,8 @@ for material in materials_to_test:
         
         model.load_state_dict(torch.load(best_model_path, map_location=device, weights_only=False))
         model.eval()
+        all_predictions = []
+        all_labels = []
         running_test_loss = 0.0
         with torch.no_grad():
             for batch in test_loader:
@@ -134,16 +136,29 @@ for material in materials_to_test:
                 outputs = model(images, graph_features)
                 loss = criterion(outputs.squeeze(), labels)
                 running_test_loss += loss.item() * images.size(0)
+                all_predictions.append(outputs.squeeze())
+                all_labels.append(labels)
+
+        # Concatenate all the batches
+        all_predictions = torch.cat(all_predictions)
+        all_labels = torch.cat(all_labels)
+
+        # Compute Mean Absolute Percentage Error (MAPE)
+        mape = torch.mean(torch.abs((all_predictions - all_labels) / (all_labels + 1e-9))) * 100
+        print(f"Mean Absolute Percentage Error (MAPE): {mape.item():.2f}%")
+
+        wandb.log({"MAPE": mape.item()})
         test_loss = running_test_loss / len(test_loader.dataset)
         
         print(f"Test Loss: {test_loss:.4f}")
         print(f"Training Duration (seconds): {training_duration:.2f}")
         
         # Log test loss and training duration, and add them to the summary
-        wandb.log({"test_loss": test_loss, "training_duration": training_duration})
+        wandb.log({"test_loss": test_loss, "training_duration": training_duration, "MAPE": mape.item()})
         wandb.run.summary["test_loss"] = test_loss
         wandb.run.summary["training_duration"] = training_duration
-        
+        wandb.run.summary["MAPE"] = mape.item()
+
         results = {
             "train_losses": train_losses,
             "val_losses": val_losses,
