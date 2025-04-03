@@ -11,8 +11,9 @@ import wandb
 materials_to_test = ['Cu_R7_optimized', 'Cu_R8_optimized', 'Cu_R9_optimized', 'Cu_R10_optimized']
 seed = 42
 num_of_folds = 3
-batch_size = 32
+batch_size = 64
 num_epochs = 100
+graph_hidden_dims = [512, 1024, 4]
 main_experiment_dir = 'results/image_feature_kg'
 project_name = 'hydrogen_storage_knowledge_graph_experiments'
 
@@ -34,7 +35,8 @@ config = {
          "gamma": 0.1
     },
     "dropout_rate": 0.50,
-    "project_name": project_name
+    "project_name": project_name,
+    "graph_hidden_dims": graph_hidden_dims
 }
 
 for material in materials_to_test:
@@ -56,7 +58,7 @@ for material in materials_to_test:
         sample = train_loader.dataset[0]
         num_graph_features = sample['features'].shape[0]
         
-        model = MultimodalModel(num_graph_features=num_graph_features, num_graph_outputs=1, num_outputs=1, dropout_rate=run_config["dropout_rate"]).to(device)
+        model = MultimodalModel(num_graph_features=num_graph_features, graph_hidden_dims=run_config["graph_hidden_dims"], dropout_rate=run_config["dropout_rate"]).to(device)
         criterion = nn.MSELoss()
         
         optimizer = optim.Adam(model.parameters(), **run_config["optimizer_params"])

@@ -31,22 +31,91 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
     # -------------------------------
     # 1. Build the Knowledge Graph
     # -------------------------------
-    energies_df = pd.read_csv('data/energies.txt', sep=r'\s+', index_col=0)
-    formation_df = pd.read_csv('data/formation_energies.txt', sep=r'\s+', index_col=0)
+    energies_df = pd.read_csv('data/energies.txt', sep=r'\s+')
+    formation_df = pd.read_csv('data/formation_energies.txt', sep=r'\s+')
     material_mapping = {
-        'Cu_R7_optimized': {'energies_key': 'R0.7', 'formation_key': 'R7'},
-        'Cu_R8_optimized': {'energies_key': 'R0.8', 'formation_key': 'R8'},
-        'Cu_R9_optimized': {'energies_key': 'R0.9', 'formation_key': 'R9'},
-        'Cu_R10_optimized': {'energies_key': 'R1.0', 'formation_key': 'R10'},
+        'Cu_R7_optimized': {'energies_key': 'R0.7', 'formation_key': 'R7', 'radius': 0.7},
+        'Cu_R8_optimized': {'energies_key': 'R0.8', 'formation_key': 'R8', 'radius': 0.8},
+        'Cu_R9_optimized': {'energies_key': 'R0.9', 'formation_key': 'R9', 'radius': 0.9},
+        'Cu_R10_optimized': {'energies_key': 'R1.0', 'formation_key': 'R10', 'radius': 1.0},
     }
+    
     G = nx.Graph()
+    
+    # Add material nodes with their properties
     for material, keys in material_mapping.items():
-        energies_features = energies_df.loc[keys['energies_key']].to_dict()
-        formation_features = {f'formation_{k}': v for k, v in formation_df.loc[keys['formation_key']].to_dict().items()}
-        combined_features = {**energies_features, **formation_features}
-        G.add_node(material, features=combined_features, type='material')
+        # Get energy features for this specific material
+        energies_features = energies_df.loc[energies_df.index == keys['energies_key']].iloc[0].to_dict()
+        formation_features = formation_df.loc[formation_df.index == keys['formation_key']].iloc[0].to_dict()
+        
+        # Add radius information
+        material_features = {
+            'radius': keys['radius'],
+            **energies_features,
+            **{f'formation_{k}': v for k, v in formation_features.items()}
+        }
+        
+        # Add node for the material
+        G.add_node(material, features=material_features, type='material')
+    
+    # Add edges between materials based on radius similarity
+    materials = list(material_mapping.keys())
+    for i in range(len(materials)):
+        for j in range(i + 1, len(materials)):
+            mat1, mat2 = materials[i], materials[j]
+            radius1 = material_mapping[mat1]['radius']
+            radius2 = material_mapping[mat2]['radius']
+            
+            # Add edge with weight based on radius difference
+            radius_diff = abs(radius1 - radius2)
+            if radius_diff <= 0.3:  # Only connect relatively similar materials
+                similarity = 1.0 - (radius_diff / 0.3)  # Normalize to [0,1]
+                G.add_edge(mat1, mat2, weight=similarity)
+    
     print("Knowledge graph built:")
-    print("Number of nodes:", G.number_of_nodes())
+    print(f"Number of nodes: {G.number_of_nodes()}")
+    print(f"Number of edges: {G.number_of_edges()}")
+    
+    # Function to get neighborhood features
+    def get_neighborhood_features(graph, material):
+        """Get features of the material and its neighbors."""
+        features = graph.nodes[material]['features'].copy()
+        
+        # Add neighborhood information
+        neighbors = list(graph.neighbors(material))
+        if neighbors:
+            neighbor_features = {
+                'num_neighbors': len(neighbors),
+                'avg_neighbor_radius': np.mean([graph.nodes[n]['features']['radius'] for n in neighbors]),
+                'min_neighbor_radius': min(graph.nodes[n]['features']['radius'] for n in neighbors),
+                'max_neighbor_radius': max(graph.nodes[n]['features']['radius'] for n in neighbors),
+                'avg_edge_weight': np.mean([graph[material][n]['weight'] for n in neighbors])
+            }
+        else:
+            neighbor_features = {
+                'num_neighbors': 0,
+                'avg_neighbor_radius': 0,
+                'min_neighbor_radius': 0,
+                'max_neighbor_radius': 0,
+                'avg_edge_weight': 0
+            }
+        
+        features.update(neighbor_features)
+        return features
+
+    # Modify get_sample_data to use neighborhood features
+    def get_sample_data(graph, material, rotation):
+        if not graph.has_node(material):
+            raise ValueError(f"Material node '{material}' not found in the graph.")
+        
+        # Get features including neighborhood information
+        material_features = get_neighborhood_features(graph, material)
+        
+        file_label = "original" if rotation == 0 else f"rot_{rotation}"
+        xyz_file = f"data/multimodal_data/{material}/xyzs/{file_label}.xyz"
+        image_file = f"data/multimodal_data/{material}/images/{file_label}.png"
+        xyz_data = load_xyz_file(xyz_file)
+        return material_features, xyz_data, image_file
 
     # -------------------------------
     # 2. Load Labels
@@ -70,16 +139,6 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
                 xyz_data.append((atom, coords))
         return xyz_data
 
-    def get_sample_data(graph, material, rotation):
-        if not graph.has_node(material):
-            raise ValueError(f"Material node '{material}' not found in the graph.")
-        material_features = graph.nodes[material]['features']
-        file_label = "original" if rotation == 0 else f"rot_{rotation}"
-        xyz_file = f"data/multimodal_data/{material}/xyzs/{file_label}.xyz"
-        image_file = f"data/multimodal_data/{material}/images/{file_label}.png"
-        xyz_data = load_xyz_file(xyz_file)
-        return material_features, xyz_data, image_file
-
     # -------------------------------
     # 4. Define Custom Dataset
     # -------------------------------
@@ -101,11 +160,24 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
                 feats = graph.nodes[material]['features']
                 for k in self.feature_keys:
                     all_features[k].append(feats[k])
-            self.feature_min = {k: np.min(all_features[k]) for k in self.feature_keys}
-            self.feature_max = {k: np.max(all_features[k]) for k in self.feature_keys}
+            
+            # Check and store feature ranges
+            self.feature_min = {}
+            self.feature_max = {}
+            for k in self.feature_keys:
+                min_val = np.min(all_features[k])
+                max_val = np.max(all_features[k])
+                if np.isclose(min_val, max_val):
+                    print(f"Warning: Feature '{k}' has identical values across all samples: {min_val}")
+                self.feature_min[k] = min_val
+                self.feature_max[k] = max_val
+            
+            # Check and store label range
             all_labels = list(label_mapping.values())
             self.label_min = np.min(all_labels)
             self.label_max = np.max(all_labels)
+            if np.isclose(self.label_min, self.label_max):
+                raise ValueError(f"All labels have identical value: {self.label_min}. This indicates a problem with the dataset.")
             
         def __len__(self):
             return len(self.samples)
@@ -117,21 +189,20 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
             for k in self.feature_keys:
                 min_val = self.feature_min[k]
                 max_val = self.feature_max[k]
-                if max_val > min_val:
-                    norm = 2 * ((features[k] - min_val) / (max_val - min_val)) - 1
-                else:
-                    norm = 0.0
+                # Add small epsilon to denominator to prevent division by zero
+                norm = (features[k] - min_val) / (max_val - min_val + 1e-8)
                 normalized_features.append(norm)
+            
             features_tensor = torch.tensor(normalized_features, dtype=torch.float)
             image = Image.open(image_file).convert('RGB')
             if self.image_transform:
                 image = self.image_transform(image)
+            
             formation_key = self.material_mapping[material]['formation_key']
             label_value = self.label_mapping[formation_key]
-            if self.label_max > self.label_min:
-                normalized_label = 2 * ((label_value - self.label_min) / (self.label_max - self.label_min)) - 1
-            else:
-                normalized_label = 0.0
+            # Add small epsilon to denominator for labels as well
+            normalized_label = (label_value - self.label_min) / (self.label_max - self.label_min + 1e-8)
+            
             sample = {
                 'material': material,
                 'features': features_tensor,
