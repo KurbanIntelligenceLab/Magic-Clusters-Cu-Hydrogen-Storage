@@ -58,23 +58,66 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
         # Add node for the material
         G.add_node(material, features=material_features, type='material')
     
-    # Add edges between materials based on radius similarity
+    # Add edges between materials based on multiple criteria
     materials = list(material_mapping.keys())
     for i in range(len(materials)):
         for j in range(i + 1, len(materials)):
             mat1, mat2 = materials[i], materials[j]
+            
+            # Calculate multiple similarity metrics
             radius1 = material_mapping[mat1]['radius']
             radius2 = material_mapping[mat2]['radius']
-            
-            # Add edge with weight based on radius difference
             radius_diff = abs(radius1 - radius2)
+            
+            # Get energy features for similarity calculation
+            energy1 = energies_df.loc[energies_df.index == material_mapping[mat1]['energies_key']].iloc[0]
+            energy2 = energies_df.loc[energies_df.index == material_mapping[mat2]['energies_key']].iloc[0]
+            energy_similarity = 1.0 - np.mean(np.abs(energy1 - energy2) / (np.abs(energy1) + np.abs(energy2) + 1e-8))
+            
+            # Combine similarities
             if radius_diff <= 0.3:  # Only connect relatively similar materials
-                similarity = 1.0 - (radius_diff / 0.3)  # Normalize to [0,1]
-                G.add_edge(mat1, mat2, weight=similarity)
+                radius_similarity = 1.0 - (radius_diff / 0.3)
+                total_similarity = 0.5 * radius_similarity + 0.5 * energy_similarity
+                G.add_edge(mat1, mat2, weight=total_similarity, 
+                          radius_similarity=radius_similarity,
+                          energy_similarity=energy_similarity)
     
     print("Knowledge graph built:")
     print(f"Number of nodes: {G.number_of_nodes()}")
     print(f"Number of edges: {G.number_of_edges()}")
+    
+    # Function to compute structural features from XYZ data
+    def compute_structural_features(xyz_data):
+        coords = np.array([coord for _, coord in xyz_data])
+        features = {}
+        
+        # Compute pairwise distances
+        distances = np.linalg.norm(coords[:, np.newaxis] - coords, axis=2)
+        np.fill_diagonal(distances, np.inf)  # Ignore self-distances
+        
+        # Basic structural features
+        features['min_distance'] = np.min(distances)
+        features['max_distance'] = np.max(distances)
+        features['mean_distance'] = np.mean(distances)
+        features['std_distance'] = np.std(distances)
+        
+        # Coordination number (atoms within 3.0 Å)
+        coordination = np.sum(distances < 3.0, axis=1)
+        features['min_coordination'] = np.min(coordination)
+        features['max_coordination'] = np.max(coordination)
+        features['mean_coordination'] = np.mean(coordination)
+        
+        # Density features
+        volume = np.prod(np.max(coords, axis=0) - np.min(coords, axis=0))
+        features['density'] = len(coords) / volume if volume > 0 else 0
+        
+        # Symmetry features
+        center = np.mean(coords, axis=0)
+        radial_distances = np.linalg.norm(coords - center, axis=1)
+        features['radial_std'] = np.std(radial_distances)
+        features['radial_mean'] = np.mean(radial_distances)
+        
+        return features
     
     # Function to get neighborhood features
     def get_neighborhood_features(graph, material):
@@ -89,7 +132,9 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
                 'avg_neighbor_radius': np.mean([graph.nodes[n]['features']['radius'] for n in neighbors]),
                 'min_neighbor_radius': min(graph.nodes[n]['features']['radius'] for n in neighbors),
                 'max_neighbor_radius': max(graph.nodes[n]['features']['radius'] for n in neighbors),
-                'avg_edge_weight': np.mean([graph[material][n]['weight'] for n in neighbors])
+                'avg_edge_weight': np.mean([graph[material][n]['weight'] for n in neighbors]),
+                'avg_energy_similarity': np.mean([graph[material][n]['energy_similarity'] for n in neighbors]),
+                'avg_radius_similarity': np.mean([graph[material][n]['radius_similarity'] for n in neighbors])
             }
         else:
             neighbor_features = {
@@ -97,13 +142,15 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
                 'avg_neighbor_radius': 0,
                 'min_neighbor_radius': 0,
                 'max_neighbor_radius': 0,
-                'avg_edge_weight': 0
+                'avg_edge_weight': 0,
+                'avg_energy_similarity': 0,
+                'avg_radius_similarity': 0
             }
         
         features.update(neighbor_features)
         return features
 
-    # Modify get_sample_data to use neighborhood features
+    # Modify get_sample_data to use enhanced features
     def get_sample_data(graph, material, rotation):
         if not graph.has_node(material):
             raise ValueError(f"Material node '{material}' not found in the graph.")
@@ -115,6 +162,18 @@ def create_data_generator(material_to_test, seed, num_of_folds=5, batch_size=32)
         xyz_file = f"data/multimodal_data/{material}/xyzs/{file_label}.xyz"
         image_file = f"data/multimodal_data/{material}/images/{file_label}.png"
         xyz_data = load_xyz_file(xyz_file)
+        
+        # Add structural features
+        structural_features = compute_structural_features(xyz_data)
+        material_features.update(structural_features)
+        
+        # Add rotation-specific features
+        rotation_features = {
+            'rotation_angle': rotation,
+            'is_original': 1.0 if rotation == 0 else 0.0
+        }
+        material_features.update(rotation_features)
+        
         return material_features, xyz_data, image_file
 
     # -------------------------------
