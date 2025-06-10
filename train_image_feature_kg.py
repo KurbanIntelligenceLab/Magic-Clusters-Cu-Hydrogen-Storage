@@ -11,9 +11,9 @@ import wandb
 materials_to_test = ['Cu_R7_optimized', 'Cu_R8_optimized', 'Cu_R9_optimized', 'Cu_R10_optimized']
 seed = 42
 num_of_folds = 3
-batch_size = 64
+batch_size = 128
 num_epochs = 300
-graph_hidden_dims = [512, 1024, 4]
+graph_hidden_dims = [256, 512, 4]
 main_experiment_dir = 'results/image_feature_kg'
 project_name = 'hydrogen_storage_knowledge_graph_experiments'
 
