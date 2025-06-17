@@ -9,12 +9,14 @@ import os
 import json
 from sklearn.preprocessing import StandardScaler
 import numpy as np
+import random
 
 
 # ------------------- CONFIG -------------------
 CONFIG = {
+    'seed': 42,
     'batch_size': 6,
-    'epochs': 100,
+    'epochs': 300,
     'lr': 1e-3,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
     'leave_out_ids': ['R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
@@ -30,6 +32,18 @@ CONFIG = {
         'num_targets': 1
     }
 }
+
+# ------------------- SEED SETTING -------------------
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+set_seed(CONFIG['seed'])
 
 # ------------------- DATASET -------------------
 class MultiModalDataset(Dataset):
@@ -112,8 +126,10 @@ def train_and_eval(kg, config):
             optimizer = optim.Adam(model.parameters(), lr=config['lr'])
             loss_fn = nn.MSELoss()
             model_path = os.path.join(result_dir, 'best_model.pt')
-            best_mae = float('inf')
+            best_test_mae = float('inf')
             best_state = None
+            best_preds_inv = None
+            best_trues_inv = None
             # Training
             if not os.path.exists(model_path):
                 model.train()
@@ -139,11 +155,11 @@ def train_and_eval(kg, config):
                         loss.backward()
                         optimizer.step()
                         total_loss += loss.item() * len(targets)
-                    # Validation on train set for best model selection (since no val set, use train MAE)
+                    # Evaluate on test set after each epoch
                     model.eval()
                     with torch.no_grad():
-                        all_preds, all_trues = [], []
-                        for schnet_batch, image_batch, tabular_x, targets in train_loader:
+                        test_preds, test_trues = [], []
+                        for schnet_batch, image_batch, tabular_x, targets in test_loader:
                             schnet_batch = schnet_batch.to(config['device'])
                             image_batch = image_batch.to(config['device'])
                             tabular_x = tabular_x.to(config['device'])
@@ -155,69 +171,45 @@ def train_and_eval(kg, config):
                                 edge_index = torch.zeros((2,0), dtype=torch.long)
                             edge_index = edge_index.to(config['device'])
                             tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
-                            preds = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
-                            all_preds.append(preds.cpu())
-                            all_trues.append(targets.cpu())
-                        all_preds = torch.cat(all_preds, dim=0)
-                        all_trues = torch.cat(all_trues, dim=0)
-                        mae = torch.mean(torch.abs(all_preds - all_trues)).item()
-                        if mae < best_mae:
-                            best_mae = mae
+                            pred = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
+                            test_preds.append(pred.cpu())
+                            test_trues.append(targets.cpu())
+                        test_preds = torch.cat(test_preds, dim=0).numpy().flatten()
+                        test_trues = torch.cat(test_trues, dim=0).numpy().flatten()
+                        preds_inv = target_scaler.inverse_transform(test_preds.reshape(-1,1)).flatten()
+                        trues_inv = target_scaler.inverse_transform(test_trues.reshape(-1,1)).flatten()
+                        test_mae = float(np.mean(np.abs(preds_inv - trues_inv)))
+                        if test_mae < best_test_mae:
+                            best_test_mae = test_mae
                             best_state = model.state_dict()
+                            best_preds_inv = preds_inv.copy()
+                            best_trues_inv = trues_inv.copy()
                     model.train()
-                    if epoch % 20 == 0:
-                        print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Train MAE: {mae:.4f}')
-                # Save best model after training
+                    if epoch % 5 == 0:
+                        print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f}')
+                # Save best model and results after training
                 torch.save(best_state, model_path)
-                print(f"Saved best model to {model_path} (MAE: {best_mae:.4f})")
+                print(f"Saved best model to {model_path} (Test MAE: {best_test_mae:.4f})")
+                results_json = {
+                    'pred': best_preds_inv.tolist(),
+                    'true': best_trues_inv.tolist(),
+                    'mae': best_test_mae
+                }
+                with open(os.path.join(result_dir, 'results.json'), 'w') as f:
+                    json.dump(results_json, f, indent=2)
+                results[test_id][target_key] = results_json
             else:
                 print(f"Loading model from {model_path}")
                 model.load_state_dict(torch.load(model_path, map_location=config['device']))
-            # Testing
-            model.eval()
-            preds, trues = [], []
-            with torch.no_grad():
-                for schnet_batch, image_batch, tabular_x, targets in test_loader:
-                    schnet_batch = schnet_batch.to(config['device'])
-                    image_batch = image_batch.to(config['device'])
-                    tabular_x = tabular_x.to(config['device'])
-                    # For test, use a single node graph (no edges)
-                    batch_size = tabular_x.shape[0]
-                    if batch_size > 1:
-                        edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
-                        edge_index = torch.cat([edge_index, edge_index[[1,0],:]], dim=1)
-                    else:
-                        edge_index = torch.zeros((2,0), dtype=torch.long)
-                    edge_index = edge_index.to(config['device'])
-                    tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
-                    pred = model(
-                        schnet_batch, image_batch, tabular_x,
-                        edge_index,
-                        tabular_batch
-                    )
-                    preds.append(pred.cpu())
-                    trues.append(targets.cpu())
-            preds = torch.cat(preds, dim=0).numpy().flatten()
-            trues = torch.cat(trues, dim=0).numpy().flatten()
-            # Inverse transform to original scale
-            preds_inv = target_scaler.inverse_transform(preds.reshape(-1,1)).flatten()
-            trues_inv = target_scaler.inverse_transform(trues.reshape(-1,1)).flatten()
-            mae = float(np.mean(np.abs(preds_inv - trues_inv)))
-            print(f'Predictions for {test_id} ({target_key}):', preds_inv)
-            print(f'True values for {test_id} ({target_key}):', trues_inv)
-            print(f'Test MAE for {test_id} ({target_key}): {mae:.4f}')
-            # Save results
-            results_json = {
-                'pred': preds_inv.tolist(),
-                'true': trues_inv.tolist(),
-                'mae': mae
-            }
-            with open(os.path.join(result_dir, 'results.json'), 'w') as f:
-                json.dump(results_json, f, indent=2)
-            results[test_id][target_key] = results_json
+                # Also load results.json if exists
+                results_json_path = os.path.join(result_dir, 'results.json')
+                if os.path.exists(results_json_path):
+                    with open(results_json_path) as f:
+                        results_json = json.load(f)
+                    results[test_id][target_key] = results_json
     return results
 
 if __name__ == '__main__':
-    kg = load_knowledge_graph('data/knowledge_graph.json')
+    kg = load_knowledge_graph('new_data/knowledge_graph.json')
     results = train_and_eval(kg, CONFIG)
     print(results)
