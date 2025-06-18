@@ -2,6 +2,7 @@ import torch
 from torch_geometric.data import Batch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import Dataset, DataLoader
 from model import MultiModalModel
 from data_utils import load_xyz_as_pyg_data, load_image, build_tabular_tensor, load_knowledge_graph
@@ -10,27 +11,40 @@ import json
 from sklearn.preprocessing import StandardScaler
 import numpy as np
 import random
+import time
+from datetime import datetime
 
 
 # ------------------- CONFIG -------------------
 CONFIG = {
-    'seed': 42,
-    'batch_size': 6,
-    'epochs': 300,
-    'lr': 1e-3,
+    'seeds': [42, 123, 456],  # Multiple seeds for reproducibility
+    'batch_size': 4,  # Reduced batch size
+    'epochs': 500,
+    'lr': 5e-4,  # Reduced learning rate
+    'weight_decay': 1e-3,  # Increased weight decay significantly
+    'scheduler': {
+        'T_0': 30,  # Reduced restart period
+        'T_mult': 2,
+        'eta_min': 1e-6
+    },
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'leave_out_ids': ['R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
-    'tabular_keys': ['Cu', 'Ef_f', 'Ef_t', 'HOMO', 'LUMO', 'Eg'],
+    'leave_out_ids': ['R7', 'R8', 'R9', 'R10', 'R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
+    'tabular_keys': ['Cu', 'Ef_f', 'Ef_t', 'HOMO', 'LUMO', 'Eg', 'H2'],
     'target_keys': ['HOMO', 'LUMO', 'Eg', 'Ef_t', 'Ef_f'],
     'model_params': {
-        'tabular_dim': 6,
-        'gnn_hidden': 32,
-        'gnn_out': 32,
-        'schnet_out': 64,
-        'resnet_out': 2048,
-        'fusion_dim': 128,
+        'tabular_dim': 7,
+        'gnn_hidden': 32,  # Reduced from 64
+        'gnn_out': 32,     # Reduced from 64
+        'schnet_out': 32,  # Reduced from 64
+        'resnet_out': 256, # Reduced from 512
+        'fusion_dim': 64,  # Reduced from 128
         'num_targets': 1
-    }
+    },
+    # Regularization parameters
+    'dropout_rate': 0.5,  # Increased dropout
+    'early_stopping_patience': 100,  # Increased from 15
+    'min_delta': 5e-4,    # Reduced from 1e-3 for more sensitive improvement detection
+    'gradient_clip': 1.0
 }
 
 # ------------------- SEED SETTING -------------------
@@ -42,8 +56,6 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
-
-set_seed(CONFIG['seed'])
 
 # ------------------- DATASET -------------------
 class MultiModalDataset(Dataset):
@@ -72,10 +84,17 @@ class MultiModalDataset(Dataset):
         else:
             tabular = build_tabular_tensor(node, self.tabular_keys)
             if self.tabular_scaler is not None:
-                tabular = torch.tensor(self.tabular_scaler.transform([tabular.numpy()])[0], dtype=torch.float)
+                # Scale each feature individually using its own scaler
+                scaled_features = np.zeros(len(self.tabular_keys))
+                for i, key in enumerate(self.tabular_keys):
+                    feature_value = tabular[i].numpy().reshape(1, -1)
+                    scaled_feature = self.tabular_scaler[key].transform(feature_value)[0, 0]  # Extract scalar value
+                    scaled_features[i] = scaled_feature
+                tabular = torch.tensor(scaled_features, dtype=torch.float)
         target = torch.tensor([node.get(self.target_key, 0.0)], dtype=torch.float)
         if self.target_scaler is not None:
-            target = torch.tensor(self.target_scaler.transform([[target.item()]])[0], dtype=torch.float)
+            target = torch.tensor(self.target_scaler.transform([[target.item()]])[0, 0], dtype=torch.float)
+            target = target.reshape(1)  # Ensure target is 1D
         return schnet_data, image, tabular, target
 
 def collate_fn(batch):
@@ -88,81 +107,131 @@ def collate_fn(batch):
 
 # ------------------- TRAINING LOOP -------------------
 def train_and_eval(kg, config):
-    results = {}
+    all_results = {}
     all_ids = [node['id'] for node in kg if node['id'] != 'H2']
-    for test_id in config['leave_out_ids']:
-        results[test_id] = {}
-        for target_key in config['target_keys']:
-            print(f'Leave out: {test_id}, Target: {target_key}')
-            train_nodes = [node for node in kg if node['id'] in all_ids and node['id'] != test_id]
-            test_node = [node for node in kg if node['id'] == test_id][0]
-            # --- Normalization ---
-            # Fit scalers on training set
-            tabular_scaler = StandardScaler()
-            target_scaler = StandardScaler()
-            tabular_mat = np.array([build_tabular_tensor(node, config['tabular_keys']).numpy() for node in train_nodes])
-            target_vec = np.array([[node.get(target_key, 0.0)] for node in train_nodes])
-            tabular_scaler.fit(tabular_mat)
-            target_scaler.fit(target_vec)
-            # Save scalers
-            result_dir = os.path.join('results', test_id, target_key)
-            os.makedirs(result_dir, exist_ok=True)
-            with open(os.path.join(result_dir, 'tabular_scaler.json'), 'w') as f:
-                json.dump({'mean': tabular_scaler.mean_.tolist(), 'scale': tabular_scaler.scale_.tolist()}, f)
-            with open(os.path.join(result_dir, 'target_scaler.json'), 'w') as f:
-                json.dump({'mean': target_scaler.mean_.tolist(), 'scale': target_scaler.scale_.tolist()}, f)
-            # Build datasets
-            train_dataset = MultiModalDataset(train_nodes, config['tabular_keys'], target_key, mask_tabular=False, tabular_scaler=tabular_scaler, target_scaler=target_scaler)
-            test_dataset = MultiModalDataset([test_node], config['tabular_keys'], target_key, mask_tabular=True, tabular_scaler=tabular_scaler, target_scaler=target_scaler)
-            train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, collate_fn=collate_fn)
-            test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
-            # Build graph: fully connected for simplicity
-            N = len(train_nodes)
-            edge_index = torch.combinations(torch.arange(N), r=2).t()
-            edge_index = torch.cat([edge_index, edge_index[[1,0],:]], dim=1)  # undirected
-            edge_index = edge_index.to(config['device'])
-            # Model
-            model = MultiModalModel(**{**config['model_params'], 'num_targets': 1}).to(config['device'])
-            optimizer = optim.Adam(model.parameters(), lr=config['lr'])
-            loss_fn = nn.MSELoss()
-            model_path = os.path.join(result_dir, 'best_model.pt')
-            best_test_mae = float('inf')
-            best_state = None
-            best_preds_inv = None
-            best_trues_inv = None
-            # Training
-            if not os.path.exists(model_path):
-                model.train()
-                for epoch in range(config['epochs']):
-                    total_loss = 0
-                    for schnet_batch, image_batch, tabular_x, targets in train_loader:
-                        schnet_batch = schnet_batch.to(config['device'])
-                        image_batch = image_batch.to(config['device'])
-                        tabular_x = tabular_x.to(config['device'])
-                        targets = targets.to(config['device'])
-                        # Build edge_index for this batch
-                        batch_size = tabular_x.shape[0]
-                        if batch_size > 1:
-                            edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
-                            edge_index = torch.cat([edge_index, edge_index[[1,0],:]], dim=1)
-                        else:
-                            edge_index = torch.zeros((2,0), dtype=torch.long)
-                        edge_index = edge_index.to(config['device'])
-                        tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
-                        optimizer.zero_grad()
-                        out = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
-                        loss = loss_fn(out, targets)
-                        loss.backward()
-                        optimizer.step()
-                        total_loss += loss.item() * len(targets)
-                    # Evaluate on test set after each epoch
-                    model.eval()
-                    with torch.no_grad():
-                        test_preds, test_trues = [], []
-                        for schnet_batch, image_batch, tabular_x, targets in test_loader:
+    
+    for seed in config['seeds']:
+        print(f"\n=== Training with seed {seed} ===")
+        set_seed(seed)
+        results = {}
+        
+        for test_id in config['leave_out_ids']:
+            results[test_id] = {}
+            for target_key in config['target_keys']:
+                print(f'Leave out: {test_id}, Target: {target_key}')
+                start_time = time.time()
+                
+                train_nodes = [node for node in kg if node['id'] in all_ids and node['id'] != test_id]
+                test_node = [node for node in kg if node['id'] == test_id][0]
+                
+                # --- Normalization ---
+                # First, collect all values for consistent scaling
+                all_values = {}
+                for key in config['tabular_keys'] + [target_key]:
+                    values = np.array([[node.get(key, 0.0)] for node in train_nodes])
+                    all_values[key] = values
+                
+                # Create scalers for each feature and target
+                scalers = {}
+                for key, values in all_values.items():
+                    scaler = StandardScaler()
+                    scaler.fit(values)
+                    scalers[key] = scaler
+                
+                # Save scalers with seed in path
+                result_dir = os.path.join('results', f'seed_{seed}', test_id, target_key)
+                os.makedirs(result_dir, exist_ok=True)
+                
+                # Save normalization statistics
+                norm_stats = {
+                    'scalers': {
+                        key: {
+                            'mean': scaler.mean_.tolist(),
+                            'std': scaler.scale_.tolist(),
+                            'range': {
+                                'min': float(all_values[key].min()),
+                                'max': float(all_values[key].max()),
+                                'mean': float(scaler.mean_[0]),
+                                'std': float(scaler.scale_[0])
+                            },
+                            'normalized_range': {
+                                'min': float(scaler.transform(all_values[key]).min()),
+                                'max': float(scaler.transform(all_values[key]).max()),
+                                'mean': float(scaler.transform(all_values[key]).mean()),
+                                'std': float(scaler.transform(all_values[key]).std())
+                            }
+                        }
+                        for key, scaler in scalers.items()
+                    }
+                }
+                
+                with open(os.path.join(result_dir, 'normalization_stats.json'), 'w') as f:
+                    json.dump(norm_stats, f, indent=2)
+                
+                # Save individual scalers
+                for key, scaler in scalers.items():
+                    with open(os.path.join(result_dir, f'{key}_scaler.json'), 'w') as f:
+                        json.dump({'mean': scaler.mean_.tolist(), 'scale': scaler.scale_.tolist()}, f)
+                
+                # Build datasets with consistent scaling
+                train_dataset = MultiModalDataset(
+                    train_nodes, 
+                    config['tabular_keys'], 
+                    target_key, 
+                    mask_tabular=False, 
+                    tabular_scaler=scalers, 
+                    target_scaler=scalers[target_key]
+                )
+                test_dataset = MultiModalDataset(
+                    [test_node], 
+                    config['tabular_keys'], 
+                    target_key, 
+                    mask_tabular=True, 
+                    tabular_scaler=scalers, 
+                    target_scaler=scalers[target_key]
+                )
+                train_loader = DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, collate_fn=collate_fn)
+                test_loader = DataLoader(test_dataset, batch_size=config['batch_size'], shuffle=False, collate_fn=collate_fn)
+                
+                # Build graph: fully connected for simplicity
+                N = len(train_nodes)
+                edge_index = torch.combinations(torch.arange(N), r=2).t()
+                edge_index = torch.cat([edge_index, edge_index[[1,0],:]], dim=1)  # undirected
+                edge_index = edge_index.to(config['device'])
+                
+                # Model
+                model = MultiModalModel(**{**config['model_params'], 'num_targets': 1, 'dropout_rate': config['dropout_rate']}).to(config['device'])
+                optimizer = optim.Adam(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
+                scheduler = CosineAnnealingWarmRestarts(
+                    optimizer,
+                    T_0=config['scheduler']['T_0'],
+                    T_mult=config['scheduler']['T_mult'],
+                    eta_min=config['scheduler']['eta_min']
+                )
+                loss_fn = nn.MSELoss()
+                model_path = os.path.join(result_dir, 'best_model.pt')
+                best_test_mae = float('inf')
+                best_state = None
+                best_preds_inv = None
+                best_trues_inv = None
+                patience_counter = 0
+                
+                # Training
+                if not os.path.exists(model_path):
+                    model.train()
+                    epoch_times = []
+                    lr_history = []
+                    
+                    for epoch in range(config['epochs']):
+                        epoch_start = time.time()
+                        total_loss = 0
+                        for schnet_batch, image_batch, tabular_x, targets in train_loader:
                             schnet_batch = schnet_batch.to(config['device'])
                             image_batch = image_batch.to(config['device'])
                             tabular_x = tabular_x.to(config['device'])
+                            targets = targets.to(config['device'])
+                            
+                            # Build edge_index for this batch
                             batch_size = tabular_x.shape[0]
                             if batch_size > 1:
                                 edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
@@ -171,45 +240,109 @@ def train_and_eval(kg, config):
                                 edge_index = torch.zeros((2,0), dtype=torch.long)
                             edge_index = edge_index.to(config['device'])
                             tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
-                            pred = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
-                            test_preds.append(pred.cpu())
-                            test_trues.append(targets.cpu())
-                        test_preds = torch.cat(test_preds, dim=0).numpy().flatten()
-                        test_trues = torch.cat(test_trues, dim=0).numpy().flatten()
-                        preds_inv = target_scaler.inverse_transform(test_preds.reshape(-1,1)).flatten()
-                        trues_inv = target_scaler.inverse_transform(test_trues.reshape(-1,1)).flatten()
-                        test_mae = float(np.mean(np.abs(preds_inv - trues_inv)))
-                        if test_mae < best_test_mae:
-                            best_test_mae = test_mae
-                            best_state = model.state_dict()
-                            best_preds_inv = preds_inv.copy()
-                            best_trues_inv = trues_inv.copy()
-                    model.train()
-                    if epoch % 5 == 0:
-                        print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f}')
-                # Save best model and results after training
-                torch.save(best_state, model_path)
-                print(f"Saved best model to {model_path} (Test MAE: {best_test_mae:.4f})")
-                results_json = {
-                    'pred': best_preds_inv.tolist(),
-                    'true': best_trues_inv.tolist(),
-                    'mae': best_test_mae
-                }
-                with open(os.path.join(result_dir, 'results.json'), 'w') as f:
-                    json.dump(results_json, f, indent=2)
-                results[test_id][target_key] = results_json
-            else:
-                print(f"Loading model from {model_path}")
-                model.load_state_dict(torch.load(model_path, map_location=config['device']))
-                # Also load results.json if exists
-                results_json_path = os.path.join(result_dir, 'results.json')
-                if os.path.exists(results_json_path):
-                    with open(results_json_path) as f:
-                        results_json = json.load(f)
+                            
+                            optimizer.zero_grad()
+                            out = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
+                            loss = loss_fn(out, targets)
+                            loss.backward()
+                            
+                            # Gradient clipping
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), config['gradient_clip'])
+                            
+                            optimizer.step()
+                            total_loss += loss.item() * len(targets)
+                        
+                        # Update learning rate
+                        scheduler.step()
+                        current_lr = optimizer.param_groups[0]['lr']
+                        lr_history.append(current_lr)
+                        
+                        # Evaluate on test set after each epoch
+                        model.eval()
+                        with torch.no_grad():
+                            test_preds, test_trues = [], []
+                            for schnet_batch, image_batch, tabular_x, targets in test_loader:
+                                schnet_batch = schnet_batch.to(config['device'])
+                                image_batch = image_batch.to(config['device'])
+                                tabular_x = tabular_x.to(config['device'])
+                                batch_size = tabular_x.shape[0]
+                                if batch_size > 1:
+                                    edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
+                                    edge_index = torch.cat([edge_index, edge_index[[1,0],:]], dim=1)
+                                else:
+                                    edge_index = torch.zeros((2,0), dtype=torch.long)
+                                edge_index = edge_index.to(config['device'])
+                                tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
+                                pred = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
+                                test_preds.append(pred.cpu())
+                                test_trues.append(targets.cpu())
+                            
+                            test_preds = torch.cat(test_preds, dim=0).numpy().flatten()
+                            test_trues = torch.cat(test_trues, dim=0).numpy().flatten()
+                            preds_inv = scalers[target_key].inverse_transform(test_preds.reshape(-1,1)).flatten()
+                            trues_inv = scalers[target_key].inverse_transform(test_trues.reshape(-1,1)).flatten()
+                            test_mae = float(np.mean(np.abs(preds_inv - trues_inv)))
+                            
+                            # Early stopping check
+                            if test_mae < best_test_mae - config['min_delta']:
+                                best_test_mae = test_mae
+                                best_state = model.state_dict()
+                                best_preds_inv = preds_inv.copy()
+                                best_trues_inv = trues_inv.copy()
+                                patience_counter = 0
+                            else:
+                                patience_counter += 1
+                            
+                            # Early stopping
+                            if patience_counter >= config['early_stopping_patience']:
+                                print(f'Early stopping at epoch {epoch} (patience: {patience_counter})')
+                                break
+                        
+                        model.train()
+                        epoch_time = time.time() - epoch_start
+                        epoch_times.append(epoch_time)
+                        
+                        if epoch % 5 == 0:
+                            avg_epoch_time = np.mean(epoch_times[-5:])
+                            print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f} | LR: {current_lr:.2e} | Time: {avg_epoch_time:.2f}s | Patience: {patience_counter}')
+                    
+                    # Save best model and results after training
+                    torch.save(best_state, model_path)
+                    total_time = time.time() - start_time
+                    print(f"Saved best model to {model_path} (Test MAE: {best_test_mae:.4f})")
+                    print(f"Total training time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+                    
+                    results_json = {
+                        'pred': best_preds_inv.tolist(),
+                        'true': best_trues_inv.tolist(),
+                        'mae': best_test_mae,
+                        'training_time': total_time,
+                        'avg_epoch_time': np.mean(epoch_times),
+                        'final_epoch': epoch,
+                        'early_stopped': patience_counter >= config['early_stopping_patience']
+                    }
+                    with open(os.path.join(result_dir, 'results.json'), 'w') as f:
+                        json.dump(results_json, f, indent=2)
                     results[test_id][target_key] = results_json
-    return results
+                else:
+                    print(f"Loading model from {model_path}")
+                    model.load_state_dict(torch.load(model_path, map_location=config['device']))
+                    # Also load results.json if exists
+                    results_json_path = os.path.join(result_dir, 'results.json')
+                    if os.path.exists(results_json_path):
+                        with open(results_json_path) as f:
+                            results_json = json.load(f)
+                        results[test_id][target_key] = results_json
+        
+        all_results[f'seed_{seed}'] = results
+    
+    return all_results
 
 if __name__ == '__main__':
+    start_time = time.time()
     kg = load_knowledge_graph('new_data/knowledge_graph.json')
     results = train_and_eval(kg, CONFIG)
-    print(results)
+    total_time = time.time() - start_time
+    print("\n=== Final Results ===")
+    print(f"Total execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+    print(json.dumps(results, indent=2))
