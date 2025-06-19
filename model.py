@@ -49,9 +49,18 @@ class MultiModalModel(nn.Module):
         
         self.tabular_gnn = TabularGNN(tabular_dim, gnn_hidden, gnn_out, dropout_rate)
         
-        fusion_input_dim = schnet_out + resnet_out + gnn_out
+        # Project all modalities to the same dimension for attention
+        self.proj_dim = fusion_dim  # Use fusion_dim as the common dimension
+        self.schnet_proj = nn.Linear(schnet_out, self.proj_dim)
+        self.resnet_proj = nn.Linear(resnet_out, self.proj_dim)
+        self.gnn_proj = nn.Linear(gnn_out, self.proj_dim)
+
+        # Transformer-style attention: MultiheadAttention
+        self.num_heads = 4  # You can increase this if desired
+        self.multihead_attn = nn.MultiheadAttention(embed_dim=self.proj_dim, num_heads=self.num_heads, batch_first=True)
+        
         self.fusion = nn.Sequential(
-            nn.Linear(fusion_input_dim, fusion_dim),
+            nn.Linear(self.proj_dim, fusion_dim),
             nn.BatchNorm1d(fusion_dim),
             nn.ReLU(),
             nn.Dropout(dropout_rate),
@@ -76,6 +85,17 @@ class MultiModalModel(nn.Module):
         img_feats = self.resnet(image_batch)
         gnn_feats = self.tabular_gnn(tabular_x, edge_index, tabular_batch)
         
-        # Simple concatenation instead of attention
-        fused = torch.cat([schnet_feats, img_feats, gnn_feats], dim=1)
+        # Project to common dimension
+        schnet_proj = self.schnet_proj(schnet_feats)
+        img_proj = self.resnet_proj(img_feats)
+        gnn_proj = self.gnn_proj(gnn_feats)
+        
+        # Stack: (batch, 3, proj_dim)
+        feats = torch.stack([schnet_proj, img_proj, gnn_proj], dim=1)
+        # MultiheadAttention expects (batch, seq, dim) if batch_first=True
+        # Query, Key, Value are all the same for self-attention
+        attn_output, attn_weights = self.multihead_attn(feats, feats, feats, need_weights=True)
+        # attn_output: (batch, 3, proj_dim), attn_weights: (batch, num_heads, 3, 3)
+        # Pool: mean over sequence (modalities)
+        fused = attn_output.mean(dim=1)
         return self.fusion(fused)

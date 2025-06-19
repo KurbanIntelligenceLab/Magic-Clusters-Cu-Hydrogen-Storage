@@ -28,11 +28,11 @@ CONFIG = {
         'eta_min': 1e-6
     },
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'leave_out_ids': ['R7', 'R8', 'R9', 'R10', 'R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
-    'tabular_keys': ['Cu', 'Ef_f', 'Ef_t', 'HOMO', 'LUMO', 'Eg', 'H2'],
+    'leave_out_ids': ['R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
+    'tabular_keys': ['Cu', 'Ef_f', 'Ef_t', 'HOMO', 'LUMO', 'Eg', 'H2', "Cu-H2"],
     'target_keys': ['HOMO', 'LUMO', 'Eg', 'Ef_t', 'Ef_f'],
     'model_params': {
-        'tabular_dim': 7,
+        'tabular_dim': 8,
         'gnn_hidden': 32,  # Reduced from 64
         'gnn_out': 32,     # Reduced from 64
         'schnet_out': 32,  # Reduced from 64
