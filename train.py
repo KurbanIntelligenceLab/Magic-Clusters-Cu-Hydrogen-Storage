@@ -242,8 +242,13 @@ def train_and_eval(kg, config):
                             tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
                             
                             optimizer.zero_grad()
-                            out = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
-                            loss = loss_fn(out, targets)
+                            fusion_out, tabular_out, image_out, schnet_out = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
+                            loss_fusion = loss_fn(fusion_out, targets)
+                            loss_tabular = loss_fn(tabular_out, targets)
+                            loss_image = loss_fn(image_out, targets)
+                            loss_schnet = loss_fn(schnet_out, targets)
+                            # Main loss + small auxiliary losses
+                            loss = loss_fusion + 0.3 * (loss_tabular + loss_image + loss_schnet)
                             loss.backward()
                             
                             # Gradient clipping

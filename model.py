@@ -73,6 +73,11 @@ class MultiModalModel(nn.Module):
             nn.Linear(self.proj_dim, num_targets)
         )
         
+        # --- Auxiliary heads for each modality ---
+        self.tabular_head = nn.Linear(gnn_out, num_targets)
+        self.image_head = nn.Linear(resnet_out, num_targets)
+        self.schnet_head = nn.Linear(schnet_out, num_targets)
+        
         # Initialize weights
         self.apply(self._init_weights)
     
@@ -102,4 +107,9 @@ class MultiModalModel(nn.Module):
         # Weighted sum: (batch, 3, proj_dim) * (batch, 3, 1) -> (batch, proj_dim)
         fused = torch.sum(feats * attention_weights.unsqueeze(-1), dim=1)
         
-        return self.fusion(fused)
+        fusion_out = self.fusion(fused)
+        tabular_out = self.tabular_head(gnn_feats)
+        image_out = self.image_head(img_feats)
+        schnet_out = self.schnet_head(schnet_feats)
+        
+        return fusion_out, tabular_out, image_out, schnet_out
