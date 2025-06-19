@@ -42,9 +42,12 @@ CONFIG = {
     },
     # Regularization parameters
     'dropout_rate': 0.3,  # Reduced from 0.2
-    'early_stopping_patience': 200,  # Reduced from 150
+    'early_stopping_patience': 100,  # Reduced from 150
     'min_delta': 5e-4,    # Reduced from 1e-3 for less sensitive early stopping
-    'gradient_clip': 1.0  # Reduced from 5 for less aggressive clipping
+    'gradient_clip': 1.0,  # Reduced from 5 for less aggressive clipping
+    # Modality tracking
+    'track_modalities': True,  # Enable modality contribution tracking
+    'modality_names': ['SchNet', 'Image', 'Tabular']  # Names for the three modalities
 }
 
 # ------------------- SEED SETTING -------------------
@@ -221,10 +224,13 @@ def train_and_eval(kg, config):
                     model.train()
                     epoch_times = []
                     lr_history = []
+                    modality_history = []  # Track modality contributions over epochs
                     
                     for epoch in range(config['epochs']):
                         epoch_start = time.time()
                         total_loss = 0
+                        epoch_attention_weights = []  # Track attention weights for this epoch
+                        
                         for schnet_batch, image_batch, tabular_x, targets in train_loader:
                             schnet_batch = schnet_batch.to(config['device'])
                             image_batch = image_batch.to(config['device'])
@@ -242,7 +248,7 @@ def train_and_eval(kg, config):
                             tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
                             
                             optimizer.zero_grad()
-                            fusion_out, tabular_out, image_out, schnet_out = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
+                            fusion_out, tabular_out, image_out, schnet_out, attention_weights = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
                             loss_fusion = loss_fn(fusion_out, targets)
                             loss_tabular = loss_fn(tabular_out, targets)
                             loss_image = loss_fn(image_out, targets)
@@ -256,6 +262,15 @@ def train_and_eval(kg, config):
                             
                             optimizer.step()
                             total_loss += loss.item() * len(targets)
+                            
+                            # Store attention weights for this batch
+                            if config['track_modalities']:
+                                epoch_attention_weights.append(attention_weights.detach().cpu().numpy())
+                        
+                        # Calculate average attention weights for this epoch
+                        if config['track_modalities'] and epoch_attention_weights:
+                            avg_attention = np.mean(np.concatenate(epoch_attention_weights, axis=0), axis=0)
+                            modality_history.append(avg_attention)
                         
                         # Update learning rate
                         scheduler.step()
@@ -266,6 +281,7 @@ def train_and_eval(kg, config):
                         model.eval()
                         with torch.no_grad():
                             test_preds, test_trues = [], []
+                            test_attention_weights = []
                             for schnet_batch, image_batch, tabular_x, targets in test_loader:
                                 schnet_batch = schnet_batch.to(config['device'])
                                 image_batch = image_batch.to(config['device'])
@@ -278,9 +294,10 @@ def train_and_eval(kg, config):
                                     edge_index = torch.zeros((2,0), dtype=torch.long)
                                 edge_index = edge_index.to(config['device'])
                                 tabular_batch = torch.arange(tabular_x.shape[0], device=config['device'])
-                                pred = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
-                                test_preds.append(pred.cpu())
+                                fusion_out, tabular_out, image_out, schnet_out, attention_weights = model(schnet_batch, image_batch, tabular_x, edge_index, tabular_batch)
+                                test_preds.append(fusion_out.cpu())
                                 test_trues.append(targets.cpu())
+                                test_attention_weights.append(attention_weights.cpu().numpy())
                             
                             test_preds = torch.cat(test_preds, dim=0).numpy().flatten()
                             test_trues = torch.cat(test_trues, dim=0).numpy().flatten()
@@ -288,12 +305,16 @@ def train_and_eval(kg, config):
                             trues_inv = scalers[target_key].inverse_transform(test_trues.reshape(-1,1)).flatten()
                             test_mae = float(np.mean(np.abs(preds_inv - trues_inv)))
                             
+                            # Calculate test attention weights
+                            test_avg_attention = np.mean(np.concatenate(test_attention_weights, axis=0), axis=0) if test_attention_weights else None
+                            
                             # Early stopping check
                             if test_mae < best_test_mae - config['min_delta']:
                                 best_test_mae = test_mae
                                 best_state = model.state_dict()
                                 best_preds_inv = preds_inv.copy()
                                 best_trues_inv = trues_inv.copy()
+                                best_attention_weights = test_avg_attention.copy() if test_avg_attention is not None else None
                                 patience_counter = 0
                             else:
                                 patience_counter += 1
@@ -307,15 +328,33 @@ def train_and_eval(kg, config):
                         epoch_time = time.time() - epoch_start
                         epoch_times.append(epoch_time)
                         
-                        if epoch % 5 == 0:
-                            avg_epoch_time = np.mean(epoch_times[-5:])
-                            print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f} | LR: {current_lr:.2e} | Time: {avg_epoch_time:.2f}s | Patience: {patience_counter}')
+                        # Print modality contributions every 10 epochs
+                        if epoch % 10 == 0 and config['track_modalities'] and test_avg_attention is not None:
+                            modality_str = " | ".join([f"{name}: {weight:.3f}" for name, weight in zip(config['modality_names'], test_avg_attention)])
+                            print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f} | LR: {current_lr:.2e} | Time: {epoch_time:.2f}s | Patience: {patience_counter}')
+                            print(f'  Modality Weights: {modality_str}')
+                        elif epoch % 5 == 0:
+                            print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f} | LR: {current_lr:.2e} | Time: {epoch_time:.2f}s | Patience: {patience_counter}')
                     
                     # Save best model and results after training
                     torch.save(best_state, model_path)
                     total_time = time.time() - start_time
                     print(f"Saved best model to {model_path} (Test MAE: {best_test_mae:.4f})")
                     print(f"Total training time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+                    
+                    # Print final modality contributions
+                    if config['track_modalities'] and best_attention_weights is not None:
+                        print(f"\n=== Final Modality Contributions ===")
+                        for name, weight in zip(config['modality_names'], best_attention_weights):
+                            print(f"{name}: {weight:.4f}")
+                        
+                        # Check for zero or very low weights
+                        zero_threshold = 0.01
+                        low_weight_modalities = [name for name, weight in zip(config['modality_names'], best_attention_weights) if weight < zero_threshold]
+                        if low_weight_modalities:
+                            print(f"\n⚠️  WARNING: Low contribution modalities (< {zero_threshold}): {low_weight_modalities}")
+                            if 'Tabular' in low_weight_modalities:
+                                print("💡 Consider SHAP analysis for tabular features to understand their importance")
                     
                     results_json = {
                         'pred': best_preds_inv.tolist(),
@@ -324,7 +363,12 @@ def train_and_eval(kg, config):
                         'training_time': total_time,
                         'avg_epoch_time': np.mean(epoch_times),
                         'final_epoch': epoch,
-                        'early_stopped': patience_counter >= config['early_stopping_patience']
+                        'early_stopped': patience_counter >= config['early_stopping_patience'],
+                        'modality_contributions': {
+                            'final_weights': best_attention_weights.tolist() if best_attention_weights is not None else None,
+                            'modality_names': config['modality_names'],
+                            'epoch_history': [weights.tolist() for weights in modality_history] if modality_history else None
+                        }
                     }
                     with open(os.path.join(result_dir, 'results.json'), 'w') as f:
                         json.dump(results_json, f, indent=2)
@@ -338,6 +382,22 @@ def train_and_eval(kg, config):
                         with open(results_json_path) as f:
                             results_json = json.load(f)
                         results[test_id][target_key] = results_json
+                        
+                        # Print modality contributions if available
+                        if 'modality_contributions' in results_json and results_json['modality_contributions']['final_weights']:
+                            print(f"\n=== Loaded Modality Contributions ===")
+                            weights = results_json['modality_contributions']['final_weights']
+                            names = results_json['modality_contributions']['modality_names']
+                            for name, weight in zip(names, weights):
+                                print(f"{name}: {weight:.4f}")
+                            
+                            # Check for low weights
+                            zero_threshold = 0.01
+                            low_weight_modalities = [name for name, weight in zip(names, weights) if weight < zero_threshold]
+                            if low_weight_modalities:
+                                print(f"\n⚠️  WARNING: Low contribution modalities (< {zero_threshold}): {low_weight_modalities}")
+                                if 'Tabular' in low_weight_modalities:
+                                    print("💡 Consider SHAP analysis for tabular features to understand their importance")
         
         all_results[f'seed_{seed}'] = results
     

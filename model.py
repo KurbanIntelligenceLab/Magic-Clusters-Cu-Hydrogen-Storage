@@ -112,4 +112,4 @@ class MultiModalModel(nn.Module):
         image_out = self.image_head(img_feats)
         schnet_out = self.schnet_head(schnet_feats)
         
-        return fusion_out, tabular_out, image_out, schnet_out
+        return fusion_out, tabular_out, image_out, schnet_out, attention_weights
