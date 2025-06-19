@@ -17,7 +17,7 @@ from datetime import datetime
 
 # ------------------- CONFIG -------------------
 CONFIG = {
-    'seeds': [42, 123, 456], 
+    'seeds': [42, 123], 
     'batch_size': 2,  
     'epochs': 500,
     'lr': 1e-3,  
@@ -41,8 +41,8 @@ CONFIG = {
         'num_targets': 1
     },
     # Regularization parameters
-    'dropout_rate': 0.3,  # Reduced from 0.2
-    'early_stopping_patience': 100,  # Reduced from 150
+    'dropout_rate': 0.5,  # Reduced from 0.2
+    'early_stopping_patience': 300,  # Reduced from 150
     'min_delta': 5e-4,    # Reduced from 1e-3 for less sensitive early stopping
     'gradient_clip': 1.0,  # Reduced from 5 for less aggressive clipping
     # Modality tracking
@@ -253,8 +253,18 @@ def train_and_eval(kg, config):
                             loss_tabular = loss_fn(tabular_out, targets)
                             loss_image = loss_fn(image_out, targets)
                             loss_schnet = loss_fn(schnet_out, targets)
-                            # Main loss + small auxiliary losses
-                            loss = loss_fusion + 0.3 * (loss_tabular + loss_image + loss_schnet)
+                            
+                            # Modality balance regularization
+                            # Encourage all modalities to contribute (prevent zero weights)
+                            target_balance = torch.ones_like(attention_weights) / attention_weights.shape[1]  # Equal weights
+                            balance_loss = torch.nn.functional.mse_loss(attention_weights, target_balance)
+                            
+                            # Entropy regularization to encourage exploration
+                            entropy = -torch.sum(attention_weights * torch.log(attention_weights + 1e-8), dim=1).mean()
+                            entropy_loss = -entropy  # Maximize entropy (minimize negative entropy)
+                            
+                            # Main loss + auxiliary losses + regularization
+                            loss = loss_fusion #+ 0.1 * (loss_tabular+ loss_image + loss_schnet) + 0.1 * balance_loss + 0.05 * entropy_loss
                             loss.backward()
                             
                             # Gradient clipping
@@ -333,6 +343,11 @@ def train_and_eval(kg, config):
                             modality_str = " | ".join([f"{name}: {weight:.3f}" for name, weight in zip(config['modality_names'], test_avg_attention)])
                             print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f} | LR: {current_lr:.2e} | Time: {epoch_time:.2f}s | Patience: {patience_counter}')
                             print(f'  Modality Weights: {modality_str}')
+                            
+                            # Check for very low weights and warn
+                            low_weight_modalities = [name for name, weight in zip(config['modality_names'], test_avg_attention) if weight < 0.05]
+                            if low_weight_modalities:
+                                print(f'  ⚠️  Low weights detected: {low_weight_modalities}')
                         elif epoch % 5 == 0:
                             print(f'Epoch {epoch} Loss: {total_loss/len(train_loader.dataset):.4f} | Test MAE: {test_mae:.4f} | LR: {current_lr:.2e} | Time: {epoch_time:.2f}s | Patience: {patience_counter}')
                     

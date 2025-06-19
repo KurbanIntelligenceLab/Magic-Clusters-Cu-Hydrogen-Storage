@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from torch_geometric.nn import SchNet, GCNConv, global_mean_pool
+from torch_geometric.nn import SchNet, GCNConv
 from torchvision import models
-from torch_geometric.nn import global_mean_pool
 
 class TabularGNN(nn.Module):
     def __init__(self, in_dim, hidden_dim, out_dim, dropout_rate=0.5):
@@ -10,20 +9,25 @@ class TabularGNN(nn.Module):
         self.conv1 = GCNConv(in_dim, hidden_dim)
         self.conv2 = GCNConv(hidden_dim, out_dim)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout_rate)
-        self.bn1 = nn.BatchNorm1d(hidden_dim)
-        self.bn2 = nn.BatchNorm1d(out_dim)
+        # Add projection layers for residual connections
+        self.input_proj = nn.Linear(in_dim, out_dim)
+        # Removed dropout and batch norm for tabular branch
 
     def forward(self, x, edge_index, batch):
+        # Store original input for residual connection
+        x_orig = x
+        
+        # GNN processing
         x = self.conv1(x, edge_index)
-        x = self.bn1(x)
         x = self.relu(x)
-        x = self.dropout(x)
         x = self.conv2(x, edge_index)
-        x = self.bn2(x)
         x = self.relu(x)
-        x = self.dropout(x)
-        return global_mean_pool(x, batch)
+        
+        # Add residual connection to preserve node identity
+        x_residual = self.input_proj(x_orig)
+        x = x + x_residual
+        
+        return x  # Return node-level features instead of pooled features
 
 class MultiModalModel(nn.Module):
     def __init__(self, tabular_dim, gnn_hidden, gnn_out, schnet_out, resnet_out, fusion_dim, num_targets, dropout_rate=0.5):
@@ -62,12 +66,32 @@ class MultiModalModel(nn.Module):
             nn.LayerNorm(self.proj_dim)
         )
         
-        # Simple interpretable attention instead of transformer
+        # Enhanced attention mechanism with temperature scaling and minimum weights
         self.attention = nn.Sequential(
             nn.Linear(self.proj_dim, self.proj_dim // 2),
             nn.ReLU(),
+            nn.Dropout(dropout_rate),
             nn.Linear(self.proj_dim // 2, 1)
         )
+        
+        # Temperature parameter for softmax (lower = sharper distribution)
+        self.temperature = nn.Parameter(torch.ones(1) * 1.0)
+        
+        # Minimum weight constraint
+        self.min_weight = 0.1  # Ensure each modality gets at least 10% weight
+        
+        # Alternative: Gated fusion mechanism
+        self.gate_networks = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(self.proj_dim, self.proj_dim // 2),
+                nn.ReLU(),
+                nn.Linear(self.proj_dim // 2, 1),
+                nn.Sigmoid()
+            ) for _ in range(3)  # One gate per modality
+        ])
+        
+        # Residual connection weights
+        self.residual_weights = nn.Parameter(torch.ones(3) * 0.3)  # Equal initial weights
         
         self.fusion = nn.Sequential(
             nn.Linear(self.proj_dim, num_targets)
@@ -100,16 +124,37 @@ class MultiModalModel(nn.Module):
         # Stack: (batch, 3, proj_dim)
         feats = torch.stack([schnet_proj, img_proj, gnn_proj], dim=1)
         
-        # Simple attention: compute attention scores for each modality
+        # Method 1: Enhanced attention with temperature scaling
         attention_scores = self.attention(feats).squeeze(-1)  # (batch, 3)
+        attention_scores = attention_scores / torch.clamp(self.temperature, min=0.1, max=10.0)
         attention_weights = torch.softmax(attention_scores, dim=1)  # (batch, 3)
         
+        # Apply minimum weight constraint
+        min_weights = torch.ones_like(attention_weights) * self.min_weight
+        attention_weights = torch.maximum(attention_weights, min_weights)
+        attention_weights = attention_weights / attention_weights.sum(dim=1, keepdim=True)
+        
+        # Method 2: Gated fusion
+        gates = []
+        for i, gate_net in enumerate(self.gate_networks):
+            gate = gate_net(feats[:, i, :])  # (batch, 1)
+            gates.append(gate)
+        gates = torch.cat(gates, dim=1)  # (batch, 3)
+        
+        # Combine attention and gated fusion
+        combined_weights = 0.7 * attention_weights + 0.3 * gates
+        
+        # Method 3: Residual connections
+        residual_contrib = self.residual_weights.unsqueeze(0)  # (1, 3)
+        final_weights = combined_weights + 0.1 * residual_contrib
+        final_weights = final_weights / final_weights.sum(dim=1, keepdim=True)
+        
         # Weighted sum: (batch, 3, proj_dim) * (batch, 3, 1) -> (batch, proj_dim)
-        fused = torch.sum(feats * attention_weights.unsqueeze(-1), dim=1)
+        fused = torch.sum(feats * final_weights.unsqueeze(-1), dim=1)
         
         fusion_out = self.fusion(fused)
         tabular_out = self.tabular_head(gnn_feats)
         image_out = self.image_head(img_feats)
         schnet_out = self.schnet_head(schnet_feats)
         
-        return fusion_out, tabular_out, image_out, schnet_out, attention_weights
+        return fusion_out, tabular_out, image_out, schnet_out, final_weights
