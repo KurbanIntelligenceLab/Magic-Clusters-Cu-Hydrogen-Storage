@@ -31,16 +31,15 @@ class MultiModalModel(nn.Module):
         self.schnet = SchNet(
             hidden_channels=schnet_out, 
             num_filters=schnet_out, 
-            num_interactions=2,  # Reduced from 3
+            num_interactions=2,
             num_gaussians=10, 
             cutoff=10.0, 
             output_dim=schnet_out
         )
         
-        # Create ResNet with regularization
-        resnet = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+        resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
         resnet.fc = nn.Sequential(
-            nn.Linear(512, resnet_out),
+            nn.Linear(2048, resnet_out),
             nn.BatchNorm1d(resnet_out),
             nn.ReLU(),
             nn.Dropout(dropout_rate)
@@ -49,26 +48,29 @@ class MultiModalModel(nn.Module):
         
         self.tabular_gnn = TabularGNN(tabular_dim, gnn_hidden, gnn_out, dropout_rate)
         
-        # Project all modalities to the same dimension for attention
-        self.proj_dim = fusion_dim  # Use fusion_dim as the common dimension
-        self.schnet_proj = nn.Linear(schnet_out, self.proj_dim)
-        self.resnet_proj = nn.Linear(resnet_out, self.proj_dim)
-        self.gnn_proj = nn.Linear(gnn_out, self.proj_dim)
-
-        # Transformer-style attention: MultiheadAttention
-        self.num_heads = 4  # You can increase this if desired
-        self.multihead_attn = nn.MultiheadAttention(embed_dim=self.proj_dim, num_heads=self.num_heads, batch_first=True)
+        self.proj_dim = fusion_dim
+        self.schnet_proj = nn.Sequential(
+            nn.Linear(schnet_out, self.proj_dim),
+            nn.LayerNorm(self.proj_dim)
+        )
+        self.resnet_proj = nn.Sequential(
+            nn.Linear(resnet_out, self.proj_dim),
+            nn.LayerNorm(self.proj_dim)
+        )
+        self.gnn_proj = nn.Sequential(
+            nn.Linear(gnn_out, self.proj_dim),
+            nn.LayerNorm(self.proj_dim)
+        )
+        
+        # Simple interpretable attention instead of transformer
+        self.attention = nn.Sequential(
+            nn.Linear(self.proj_dim, self.proj_dim // 2),
+            nn.ReLU(),
+            nn.Linear(self.proj_dim // 2, 1)
+        )
         
         self.fusion = nn.Sequential(
-            nn.Linear(self.proj_dim, fusion_dim),
-            nn.BatchNorm1d(fusion_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(fusion_dim, fusion_dim // 2),
-            nn.BatchNorm1d(fusion_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(fusion_dim // 2, num_targets)
+            nn.Linear(self.proj_dim, num_targets)
         )
         
         # Initialize weights
@@ -92,10 +94,12 @@ class MultiModalModel(nn.Module):
         
         # Stack: (batch, 3, proj_dim)
         feats = torch.stack([schnet_proj, img_proj, gnn_proj], dim=1)
-        # MultiheadAttention expects (batch, seq, dim) if batch_first=True
-        # Query, Key, Value are all the same for self-attention
-        attn_output, attn_weights = self.multihead_attn(feats, feats, feats, need_weights=True)
-        # attn_output: (batch, 3, proj_dim), attn_weights: (batch, num_heads, 3, 3)
-        # Pool: mean over sequence (modalities)
-        fused = attn_output.mean(dim=1)
+        
+        # Simple attention: compute attention scores for each modality
+        attention_scores = self.attention(feats).squeeze(-1)  # (batch, 3)
+        attention_weights = torch.softmax(attention_scores, dim=1)  # (batch, 3)
+        
+        # Weighted sum: (batch, 3, proj_dim) * (batch, 3, 1) -> (batch, proj_dim)
+        fused = torch.sum(feats * attention_weights.unsqueeze(-1), dim=1)
+        
         return self.fusion(fused)

@@ -17,34 +17,34 @@ from datetime import datetime
 
 # ------------------- CONFIG -------------------
 CONFIG = {
-    'seeds': [42, 123, 456],  # Multiple seeds for reproducibility
-    'batch_size': 4,  # Reduced batch size
+    'seeds': [42, 123, 456], 
+    'batch_size': 2,  
     'epochs': 500,
-    'lr': 5e-4,  # Reduced learning rate
-    'weight_decay': 1e-3,  # Increased weight decay significantly
+    'lr': 1e-3,  
+    'weight_decay': 1e-5,  # Reduced from 1e-4
     'scheduler': {
-        'T_0': 30,  # Reduced restart period
+        'T_0': 100, 
         'T_mult': 2,
         'eta_min': 1e-6
     },
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'leave_out_ids': ['R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
+    'leave_out_ids': ['R7', 'R8', 'R9', 'R10', 'R7-H2', 'R8-H2', 'R9-H2', 'R10-H2'],
     'tabular_keys': ['Cu', 'Ef_f', 'Ef_t', 'HOMO', 'LUMO', 'Eg', 'H2', "Cu-H2"],
     'target_keys': ['HOMO', 'LUMO', 'Eg', 'Ef_t', 'Ef_f'],
     'model_params': {
         'tabular_dim': 8,
-        'gnn_hidden': 32,  # Reduced from 64
-        'gnn_out': 32,     # Reduced from 64
-        'schnet_out': 32,  # Reduced from 64
-        'resnet_out': 256, # Reduced from 512
-        'fusion_dim': 64,  # Reduced from 128
+        'gnn_hidden': 64,  
+        'gnn_out': 32,     
+        'schnet_out': 32,  
+        'resnet_out': 512, #256 for resnet18
+        'fusion_dim': 32,  
         'num_targets': 1
     },
     # Regularization parameters
-    'dropout_rate': 0.5,  # Increased dropout
-    'early_stopping_patience': 100,  # Increased from 15
-    'min_delta': 5e-4,    # Reduced from 1e-3 for more sensitive improvement detection
-    'gradient_clip': 1.0
+    'dropout_rate': 0.3,  # Reduced from 0.2
+    'early_stopping_patience': 200,  # Reduced from 150
+    'min_delta': 5e-4,    # Reduced from 1e-3 for less sensitive early stopping
+    'gradient_clip': 1.0  # Reduced from 5 for less aggressive clipping
 }
 
 # ------------------- SEED SETTING -------------------
