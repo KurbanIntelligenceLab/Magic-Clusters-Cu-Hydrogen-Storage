@@ -1,0 +1,20 @@
+[project]
+name = "magic-clusters-cu-hydrogen-storage"
+version = "0.1.0"
+description = "Multimodal Explainable AI Driven Hydrogen Storage Capacity of Copper Magic Clusters: A DFTB Study."
+authors = [
+    { name = "Can Polat", email = "can.polat0@yahoo.com" }
+]
+
+[tool.flake8]
+max-line-length = 88
+exclude = [".git", "__pycache__", "old", "build", "dist", "plots"]
+ignore = ["E203", "E266", "E501", "W503"]
+
+[tool.black]
+line-length = 88
+skip-string-normalization = false
+
+[tool.isort]
+profile = "black"
+line_length = 88 

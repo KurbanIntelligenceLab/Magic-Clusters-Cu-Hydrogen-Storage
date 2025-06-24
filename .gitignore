@@ -4,3 +4,5 @@ __pycache__/
 wandb/
 .conda
 .DS_Store
+plots/
+new_data/

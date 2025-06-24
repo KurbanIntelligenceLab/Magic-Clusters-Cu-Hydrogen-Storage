@@ -2,3 +2,13 @@ numpy
 opencv-python
 matplotlib
 networkx
+torch
+torchvision
+torch-geometric
+scikit-learn
+Pillow
+ase
+flake8
+tomli
+black
+isort
