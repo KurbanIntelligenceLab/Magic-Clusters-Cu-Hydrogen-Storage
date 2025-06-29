@@ -1,62 +1,7 @@
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple
-
-
-def read_energies_file(file_path: str) -> Dict[str, Dict[str, float]]:
-    """Read the energies.txt file and return a dictionary of structure names and their properties."""
-    energies: Dict[str, Dict[str, float]] = {}
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-
-    # Skip header lines
-    start_idx = 0
-    for i, line in enumerate(lines):
-        if "HOMO" in line and "LUMO" in line:
-            start_idx = i + 2
-            break
-
-    for line in lines[start_idx:]:
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split()
-        if len(parts) >= 5:
-            name = parts[0]
-            energies[name] = {
-                "HOMO": float(parts[1]),
-                "LUMO": float(parts[2]),
-                "Eg": float(parts[3]),
-                "Ef_t": float(parts[4]),  # total energy from energies.txt
-            }
-    return energies
-
-
-def read_formation_energies_file(
-    file_path: str,
-) -> Tuple[Dict[str, Dict[str, float]], Optional[float]]:
-    """Read the Formation_energy-EF.txt file and return a dictionary of structure base names and their properties, and the H2 energy."""
-    formation_energies: Dict[str, Dict[str, float]] = {}
-    h2_energy: Optional[float] = None
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-    for line in lines[1:]:
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split()
-        if len(parts) >= 5:
-            name = parts[0]
-            formation_energies[name] = {
-                "Cu-H2": float(parts[1]),
-                "Cu": float(parts[2]),
-                "H2": float(parts[3]),
-                "Ef_f": float(parts[4]),  # formation energy
-            }
-            h2_energy = float(
-                parts[3]
-            )  # last H2 value (should be the same for all rows)
-    return formation_energies, h2_energy
+from typing import Any, Dict, List, Tuple
+import csv
 
 
 def gather_rotations(xyz_dir: str, base_name: str) -> List[Dict[str, str]]:
@@ -72,13 +17,35 @@ def gather_rotations(xyz_dir: str, base_name: str) -> List[Dict[str, str]]:
     return rotations
 
 
+def read_ground_truth_csv(file_path: str) -> Dict[str, Dict[str, Any]]:
+    data = {}
+    with open(file_path, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            struct = row['Structure'].strip()
+            def safe_float(val):
+                val = val.strip()
+                return float(val) if val not in ("", "--") else 0.0
+            def safe_int(val):
+                val = val.strip()
+                return int(val) if val not in ("", "--") else 0
+            data[struct] = {
+                "E_H": safe_float(row.get("E_H", "")),
+                "E_L": safe_float(row.get("E_L", "")),
+                "E_g": safe_float(row.get("E_g", "")),
+                "E_f": safe_float(row.get("E_f", "")),
+                "E_T": safe_float(row.get("E_T", "")),
+                "E_F": safe_float(row.get("E_F", "")),
+                "d_Cu-H": safe_float(row.get("d_Cu-H", "")),
+                "N_cu": safe_int(row.get("N_cu", "")),
+                "N_h": safe_int(row.get("N_h", "")),
+            }
+    return data
+
+
 def main() -> None:
-    """Main function to create a knowledge graph from structure and energy files."""
+    """Main function to create a knowledge graph from ground truth CSV only."""
     base_dir = "new_data"
-    energies = read_energies_file(os.path.join(base_dir, "energies.txt"))
-    formation_energies, h2_energy = read_formation_energies_file(
-        os.path.join(base_dir, "Formation_energy-EF.txt")
-    )
     structure_dirs: List[Tuple[str, bool]] = [
         ("rotated_initial-strcutures", False),
         ("rotated_optimized-structures", True),
@@ -86,7 +53,8 @@ def main() -> None:
     ]
     nodes: List[Dict[str, Any]] = []
     all_structures: set = set()
-    for dir_name, has_energy in structure_dirs:
+    ground_truth = read_ground_truth_csv("/Users/jp/Magic-Clusters-Cu-Hydrogen-Storage/new_data/labels.csv")
+    for dir_name, _ in structure_dirs:
         dir_path = os.path.join(base_dir, dir_name)
         xyz_dir = os.path.join(dir_path, "xyz_files")
         if not os.path.exists(xyz_dir):
@@ -105,26 +73,68 @@ def main() -> None:
                     continue  # avoid duplicates
                 all_structures.add(base_name)
                 node: Dict[str, Any] = {"id": base_name}
-                # Add physical/chemical properties
-                if has_energy and base_name in energies:
-                    node.update(energies[base_name])
-                # Map to formation energy using base name (strip -H2 if present)
-                base_for_formation = (
-                    base_name.split("-H2")[0] if "-H2" in base_name else base_name
-                )
-                if base_for_formation in formation_energies:
-                    node.update(formation_energies[base_for_formation])
-                # Add all rotation file paths
                 node["rotations"] = gather_rotations(xyz_dir, base_name)
+                if base_name in ground_truth:
+                    node.update(ground_truth[base_name])
                 nodes.append(node)
-    # Add H2 node
-    if h2_energy is not None:
-        nodes.append({"id": "H2", "Ef_t": h2_energy})
-    # Save to JSON
+    # Add H2 node if present in CSV
+    if "H2" in ground_truth:
+        h2_node = {"id": "H2"}
+        h2_node.update(ground_truth["H2"])
+        h2_node["rotations"] = None
+        nodes.append(h2_node)
+
+    # Build edges
+    edges = []
+    id_to_node = {node["id"]: node for node in nodes}
+    for node in nodes:
+        node_id = node["id"]
+        # Adsorption edge: Cu_x -> Cu_x-H2
+        if not node_id.endswith("-H2") and node_id + "-H2" in id_to_node:
+            edges.append({"source": node_id, "target": node_id + "-H2", "type": "adsorption"})
+        # Size increment edge: Cu_x -> Cu_{x+1}
+        if node.get("N_cu") is not None and node.get("N_h") == 0:
+            next_id = f"R{node['N_cu']+1}"
+            if next_id in id_to_node and id_to_node[next_id].get("N_h") == 0:
+                edges.append({"source": node_id, "target": next_id, "type": "size_increment"})
+        # Size increment edge for H2: Cu_x-H2 -> Cu_{x+1}-H2
+        if node.get("N_cu") is not None and node.get("N_h") == 2:
+            next_id = f"R{node['N_cu']+1}-H2"
+            if next_id in id_to_node and id_to_node[next_id].get("N_h") == 2:
+                edges.append({"source": node_id, "target": next_id, "type": "size_increment"})
+        # Cross edge: Cu_x -> Cu_{x+1}-H2
+        if node.get("N_cu") is not None and node.get("N_h") == 0:
+            cross_id = f"R{node['N_cu']+1}-H2"
+            if cross_id in id_to_node:
+                edges.append({"source": node_id, "target": cross_id, "type": "cross"})
+        # NEW: Add bidirectional desorption and size decrement edges
+        # Desorption: Cu_x-H2 -> Cu_x
+        if node_id.endswith("-H2"):
+            base_id = node_id[:-3]
+            if base_id in id_to_node:
+                edges.append({"source": node_id, "target": base_id, "type": "desorption"})
+        # Size decrement: Cu_{x+1} -> Cu_x (same doping)
+        if node.get("N_cu") is not None:
+            if node.get("N_h") == 0:
+                prev_id = f"R{node['N_cu']-1}"
+                if prev_id in id_to_node and id_to_node[prev_id].get("N_h") == 0:
+                    edges.append({"source": node_id, "target": prev_id, "type": "size_decrement"})
+            if node.get("N_h") == 2:
+                prev_id = f"R{node['N_cu']-1}-H2"
+                if prev_id in id_to_node and id_to_node[prev_id].get("N_h") == 2:
+                    edges.append({"source": node_id, "target": prev_id, "type": "size_decrement"})
+
+    # Remove nodes with '-initial' in id
+    nodes = [node for node in nodes if not node["id"].endswith("-initial")]
+    valid_ids = {node["id"] for node in nodes}
+    edges = [edge for edge in edges if edge["source"] in valid_ids and edge["target"] in valid_ids]
+
+    # Save as dict with nodes and edges
+    output = {"nodes": nodes, "edges": edges}
     output_file = os.path.join(base_dir, "knowledge_graph.json")
     with open(output_file, "w") as f:
-        json.dump(nodes, f, indent=2)
-    print(f"Created knowledge graph with {len(nodes)} nodes.\nSaved to: {output_file}")
+        json.dump(output, f, indent=2)
+    print(f"Created knowledge graph with {len(nodes)} nodes and {len(edges)} edges.\nSaved to: {output_file}")
 
 
 if __name__ == "__main__":

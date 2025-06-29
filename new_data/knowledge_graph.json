@@ -1,414 +1,327 @@
-[
-  {
-    "id": "R7-initial",
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R7-initial_rot0.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R7-initial_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R7-initial_rot1.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R7-initial_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R7-initial_rot2.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R7-initial_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R7-initial_rot3.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R7-initial_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R7-initial_rot4.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R7-initial_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R7-initial_rot5.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R7-initial_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R10-initial",
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R10-initial_rot0.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R10-initial_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R10-initial_rot1.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R10-initial_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R10-initial_rot2.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R10-initial_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R10-initial_rot3.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R10-initial_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R10-initial_rot4.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R10-initial_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R10-initial_rot5.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R10-initial_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R8-initial",
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R8-initial_rot0.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R8-initial_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R8-initial_rot1.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R8-initial_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R8-initial_rot2.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R8-initial_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R8-initial_rot3.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R8-initial_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R8-initial_rot4.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R8-initial_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R8-initial_rot5.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R8-initial_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R9-initial",
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R9-initial_rot0.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R9-initial_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R9-initial_rot1.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R9-initial_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R9-initial_rot2.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R9-initial_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R9-initial_rot3.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R9-initial_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R9-initial_rot4.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R9-initial_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_initial-strcutures/xyz_files/R9-initial_rot5.xyz",
-        "image_path": "new_data/rotated_initial-strcutures/images/R9-initial_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R8",
-    "HOMO": -3.461,
-    "LUMO": -3.224,
-    "Eg": 0.22,
-    "Ef_t": -3.3443,
-    "Cu-H2": -10556.8149,
-    "Cu": -10533.3875,
-    "H2": -21.0876,
-    "Ef_f": -2.339,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R8_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R8_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R8_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R8_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R8_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R8_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R9",
-    "HOMO": -3.458,
-    "LUMO": -3.227,
-    "Eg": 0.231,
-    "Ef_t": -3.3462,
-    "Cu-H2": -14840.5539,
-    "Cu": -14824.3163,
-    "H2": -21.0876,
-    "Ef_f": 4.849,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R9_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R9_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R9_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R9_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R9_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R9_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R10",
-    "Cu-H2": -22010.6563,
-    "Cu": -21991.5634,
-    "H2": -21.0876,
-    "Ef_f": 1.994,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R10_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R10_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R10_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R10_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R10_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R10_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R7",
-    "HOMO": -3.533,
-    "LUMO": -3.257,
-    "Eg": 0.275,
-    "Ef_t": -3.3986,
-    "Cu-H2": -8052.7644,
-    "Cu": -8027.4934,
-    "H2": -21.0876,
-    "Ef_f": -4.183,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R7_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R7_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R7_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R7_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R7_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures/images/R7_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R10-H2",
-    "HOMO": -3.383,
-    "LUMO": -3.157,
-    "Eg": 0.225,
-    "Ef_t": -3.2703,
-    "Cu-H2": -22010.6563,
-    "Cu": -21991.5634,
-    "H2": -21.0876,
-    "Ef_f": 1.994,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R8-H2",
-    "HOMO": -3.424,
-    "LUMO": -3.261,
-    "Eg": 0.162,
-    "Ef_t": -3.3075,
-    "Cu-H2": -10556.8149,
-    "Cu": -10533.3875,
-    "H2": -21.0876,
-    "Ef_f": -2.339,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R7-H2",
-    "HOMO": -3.335,
-    "LUMO": -3.295,
-    "Eg": 0.04,
-    "Ef_t": -3.335,
-    "Cu-H2": -8052.7644,
-    "Cu": -8027.4934,
-    "H2": -21.0876,
-    "Ef_f": -4.183,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "R9-H2",
-    "HOMO": -3.483,
-    "LUMO": -3.256,
-    "Eg": 0.227,
-    "Ef_t": -3.3668,
-    "Cu-H2": -14840.5539,
-    "Cu": -14824.3163,
-    "H2": -21.0876,
-    "Ef_f": 4.849,
-    "rotations": [
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot0.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot0.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot1.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot1.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot2.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot2.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot3.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot3.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot4.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot4.png"
-      },
-      {
-        "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot5.xyz",
-        "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot5.png"
-      }
-    ]
-  },
-  {
-    "id": "H2",
-    "Ef_t": -21.0876
-  }
-]
+{
+  "nodes": [
+    {
+      "id": "R8",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R8_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R8_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R8_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R8_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R8_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R8_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R8_rot5.png"
+        }
+      ],
+      "E_H": -3.461,
+      "E_L": -3.224,
+      "E_g": 0.22,
+      "E_f": -3.3443,
+      "E_T": -10533.39,
+      "E_F": 0.0,
+      "d_Cu-H": 0.0,
+      "N_cu": 177,
+      "N_h": 0
+    },
+    {
+      "id": "R9",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R9_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R9_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R9_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R9_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R9_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R9_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R9_rot5.png"
+        }
+      ],
+      "E_H": -3.458,
+      "E_L": -3.227,
+      "E_g": 0.231,
+      "E_f": -3.3462,
+      "E_T": -14824.32,
+      "E_F": 0.0,
+      "d_Cu-H": 0.0,
+      "N_cu": 249,
+      "N_h": 0
+    },
+    {
+      "id": "R10",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R10_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R10_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R10_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R10_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R10_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R10_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R10_rot5.png"
+        }
+      ],
+      "E_H": -3.427,
+      "E_L": -3.171,
+      "E_g": 0.256,
+      "E_f": -3.2881,
+      "E_T": -21991.56,
+      "E_F": 0.0,
+      "d_Cu-H": 0.0,
+      "N_cu": 369,
+      "N_h": 0
+    },
+    {
+      "id": "R7",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R7_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R7_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R7_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R7_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R7_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures/xyz_files/R7_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures/images/R7_rot5.png"
+        }
+      ],
+      "E_H": -3.533,
+      "E_L": -3.257,
+      "E_g": 0.275,
+      "E_f": -3.3986,
+      "E_T": -8027.49,
+      "E_F": 0.0,
+      "d_Cu-H": 0.0,
+      "N_cu": 135,
+      "N_h": 0
+    },
+    {
+      "id": "R10-H2",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R10-H2_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R10-H2_rot5.png"
+        }
+      ]
+    },
+    {
+      "id": "R8-H2",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R8-H2_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R8-H2_rot5.png"
+        }
+      ]
+    },
+    {
+      "id": "R7-H2",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R7-H2_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R7-H2_rot5.png"
+        }
+      ]
+    },
+    {
+      "id": "R9-H2",
+      "rotations": [
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot0.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot0.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot1.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot1.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot2.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot2.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot3.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot3.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot4.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot4.png"
+        },
+        {
+          "xyz_path": "new_data/rotated_optimized-structures-with-H2/xyz_files/R9-H2_rot5.xyz",
+          "image_path": "new_data/rotated_optimized-structures-with-H2/images/R9-H2_rot5.png"
+        }
+      ]
+    },
+    {
+      "id": "H2",
+      "E_H": 0.0,
+      "E_L": 0.0,
+      "E_g": 0.0,
+      "E_f": 0.0,
+      "E_T": -21.0876,
+      "E_F": 0.0,
+      "d_Cu-H": 0.0,
+      "N_cu": 0,
+      "N_h": 2,
+      "rotations": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "R8",
+      "target": "R8-H2",
+      "type": "adsorption"
+    },
+    {
+      "source": "R9",
+      "target": "R9-H2",
+      "type": "adsorption"
+    },
+    {
+      "source": "R10",
+      "target": "R10-H2",
+      "type": "adsorption"
+    },
+    {
+      "source": "R7",
+      "target": "R7-H2",
+      "type": "adsorption"
+    },
+    {
+      "source": "R10-H2",
+      "target": "R10",
+      "type": "desorption"
+    },
+    {
+      "source": "R8-H2",
+      "target": "R8",
+      "type": "desorption"
+    },
+    {
+      "source": "R7-H2",
+      "target": "R7",
+      "type": "desorption"
+    },
+    {
+      "source": "R9-H2",
+      "target": "R9",
+      "type": "desorption"
+    }
+  ]
+}

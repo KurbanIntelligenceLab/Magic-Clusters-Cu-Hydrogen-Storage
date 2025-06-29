@@ -97,7 +97,7 @@ class MultiModalDataset(Dataset):
                 self.target_scaler.transform([[target.item()]])[0, 0], dtype=torch.float
             )
             target = target.reshape(1)
-        return schnet_data, image, tabular, target
+        return schnet_data, image, tabular, target, node["id"]
 
 
 def collate_fn(batch: List[Any]):
@@ -110,6 +110,29 @@ def collate_fn(batch: List[Any]):
     return schnet_batch, image_batch, tabular_x, targets
 
 
+def collate_fn_with_edges(batch, kg_edges):
+    schnet_data_list, image_list, tabular_list, target_list, node_ids = zip(*batch)
+    schnet_batch = Batch.from_data_list(schnet_data_list)
+    image_batch = torch.stack(image_list)
+    tabular_x = torch.stack(tabular_list)
+    targets = torch.stack(target_list)
+    # Map node ids to batch indices
+    id_to_idx = {nid: i for i, nid in enumerate(node_ids)}
+    # Filter edges for this batch
+    edge_index = []
+    edge_types = []
+    for edge in kg_edges:
+        src, tgt = edge["source"], edge["target"]
+        if src in id_to_idx and tgt in id_to_idx:
+            edge_index.append([id_to_idx[src], id_to_idx[tgt]])
+            edge_types.append(edge.get("type", "unknown"))
+    if edge_index:
+        edge_index = torch.tensor(edge_index, dtype=torch.long).t()
+    else:
+        edge_index = torch.zeros((2, 0), dtype=torch.long)
+    return schnet_batch, image_batch, tabular_x, targets, edge_index, edge_types
+
+
 def train_one_epoch(
     model: nn.Module,
     train_loader: DataLoader,
@@ -118,11 +141,12 @@ def train_one_epoch(
     config: Dict[str, Any],
 ) -> None:
     model.train()
-    for schnet_batch, image_batch, tabular_x, targets in train_loader:
+    for schnet_batch, image_batch, tabular_x, targets, edge_index, _ in train_loader:
         schnet_batch = schnet_batch.to(config["device"])
         image_batch = image_batch.to(config["device"])
         tabular_x = tabular_x.to(config["device"])
         targets = targets.to(config["device"])
+        edge_index = edge_index.to(config["device"])
 
         batch_size = tabular_x.shape[0]
         if batch_size > 1:
@@ -158,10 +182,13 @@ def evaluate(
     with torch.no_grad():
         test_preds, test_trues = [], []
         test_attention_weights = []
-        for schnet_batch, image_batch, tabular_x, targets in test_loader:
+        for schnet_batch, image_batch, tabular_x, targets, edge_index, _ in test_loader:
             schnet_batch = schnet_batch.to(config["device"])
             image_batch = image_batch.to(config["device"])
             tabular_x = tabular_x.to(config["device"])
+            targets = targets.to(config["device"])
+            edge_index = edge_index.to(config["device"])
+
             batch_size = tabular_x.shape[0]
             if batch_size > 1:
                 edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
@@ -209,17 +236,25 @@ def evaluate(
         }
 
 
-def train_and_eval(kg: List[dict], config: Dict[str, Any]) -> Dict[str, Any]:
+def safe_float(val):
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str, Any]) -> Dict[str, Any]:
     """
     Train and evaluate the multimodal model using leave-one-out cross-validation.
     Args:
-        kg: List of knowledge graph nodes.
+        kg_nodes: List of knowledge graph nodes.
+        kg_edges: List of knowledge graph edges.
         config: Configuration dictionary.
     Returns:
         Dictionary of results for all seeds and test splits.
     """
     all_results: Dict[str, Any] = {}
-    all_ids = [node["id"] for node in kg if node["id"] != "H2"]
+    all_ids = [node["id"] for node in kg_nodes if node["id"] != "H2"]
 
     for seed in config["seeds"]:
         logging.info(f"=== Training with seed {seed} ===")
@@ -233,15 +268,15 @@ def train_and_eval(kg: List[dict], config: Dict[str, Any]) -> Dict[str, Any]:
 
                 train_nodes = [
                     node
-                    for node in kg
+                    for node in kg_nodes
                     if node["id"] in all_ids and node["id"] != test_id
                 ]
-                test_node = [node for node in kg if node["id"] == test_id][0]
+                test_node = [node for node in kg_nodes if node["id"] == test_id][0]
 
                 # --- Normalization ---
                 all_values: Dict[str, np.ndarray] = {}
                 for key in config["tabular_keys"] + [target_key]:
-                    values = np.array([[node.get(key, 0.0)] for node in train_nodes])
+                    values = np.array([[safe_float(node.get(key, 0.0))] for node in train_nodes])
                     all_values[key] = values
 
                 scalers: Dict[str, StandardScaler] = {}
@@ -313,13 +348,13 @@ def train_and_eval(kg: List[dict], config: Dict[str, Any]) -> Dict[str, Any]:
                     train_dataset,
                     batch_size=config["batch_size"],
                     shuffle=True,
-                    collate_fn=collate_fn,
+                    collate_fn=lambda batch: collate_fn_with_edges(batch, kg_edges),
                 )
                 test_loader = DataLoader(
                     test_dataset,
                     batch_size=config["batch_size"],
                     shuffle=False,
-                    collate_fn=collate_fn,
+                    collate_fn=lambda batch: collate_fn_with_edges(batch, kg_edges),
                 )
 
                 N = len(train_nodes)
@@ -433,23 +468,25 @@ def main():
     setup_logging(log_level)
 
     config = CONFIG
+    config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     if args.config:
         try:
             with open(args.config) as f:
                 user_config = json.load(f)
             config = {**CONFIG, **user_config}
-            config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
             logging.info(f"Loaded config from {args.config}")
         except Exception as e:
             logging.error(f"Failed to load config from {args.config}: {e}")
             logging.info("Falling back to default CONFIG.")
 
     try:
-        kg = load_knowledge_graph("new_data/knowledge_graph.json")
+        kg_data = load_knowledge_graph("new_data/knowledge_graph.json")
+        kg_nodes = kg_data["nodes"]
+        kg_edges = kg_data["edges"]
     except Exception as e:
         logging.error(f"Failed to load knowledge graph: {e}")
         return
-    results = train_and_eval(kg, config)
+    results = train_and_eval(kg_nodes, kg_edges, config)
     logging.info("=== Final Results ===")
     logging.info(json.dumps(results, indent=2))
 
