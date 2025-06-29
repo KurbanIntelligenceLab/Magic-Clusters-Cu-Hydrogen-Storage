@@ -14,6 +14,7 @@ from sklearn.preprocessing import StandardScaler
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader, Dataset
 from torch_geometric.data import Batch
+from tqdm import tqdm
 
 from config import CONFIG
 from model import MultiModalModel
@@ -391,7 +392,7 @@ def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str,
                 # Training
                 if not os.path.exists(model_path):
                     epoch_times: List[float] = []
-                    for epoch in range(config["epochs"]):
+                    for epoch in tqdm(range(config["epochs"]), desc="Epochs"):
                         epoch_start = time.time()
                         train_one_epoch(model, train_loader, optimizer, loss_fn, config)
                         scheduler.step()
