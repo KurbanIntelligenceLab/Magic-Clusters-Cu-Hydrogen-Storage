@@ -82,18 +82,40 @@ class MultiModalDataset(Dataset):
         if self.mask_tabular:
             tabular = torch.zeros(len(self.tabular_keys), dtype=torch.float)
         else:
-            tabular = build_tabular_tensor(node, self.tabular_keys)
+            # Apply feature scaling before building tabular tensor
+            scaled_node = {}
+            for key in self.tabular_keys:
+                value = node.get(key, 0.0)
+                scaler = self.tabular_scaler[key] if self.tabular_scaler is not None and key in self.tabular_scaler else None
+                if key == "E_T" and isinstance(scaler, dict):
+                    scaled_node[key] = apply_feature_scaling(value, key, scaler)
+                else:
+                    scaled_node[key] = apply_feature_scaling(value, key)
+            tabular = build_tabular_tensor(scaled_node, self.tabular_keys)
             if self.tabular_scaler is not None:
                 scaled_features = np.zeros(len(self.tabular_keys))
                 for i, key in enumerate(self.tabular_keys):
                     feature_value = tabular[i].numpy().reshape(1, -1)
-                    scaled_feature = self.tabular_scaler[key].transform(feature_value)[
-                        0, 0
-                    ]
-                    scaled_features[i] = scaled_feature
+                    scaler = self.tabular_scaler[key]
+                    if key == "E_T" and isinstance(scaler, dict):
+                        scaled_features[i] = feature_value[0, 0]  # Already min-max scaled
+                    else:
+                        scaled_feature = scaler.transform(feature_value)[0, 0]
+                        scaled_features[i] = scaled_feature
                 tabular = torch.tensor(scaled_features, dtype=torch.float)
-        target = torch.tensor([node.get(self.target_key, 0.0)], dtype=torch.float)
-        if self.target_scaler is not None:
+        # Handle target key mapping
+        if self.target_key == "E_Form":
+            target_value = node.get("E_F", 0.0)  # Map E_Form to E_F in data
+        else:
+            target_value = node.get(self.target_key, 0.0)
+        # Apply feature scaling to target
+        scaler = self.target_scaler if self.target_scaler is not None else None
+        if self.target_key == "E_T" and isinstance(scaler, dict):
+            target_value = apply_feature_scaling(target_value, self.target_key, scaler)
+        else:
+            target_value = apply_feature_scaling(target_value, self.target_key)
+        target = torch.tensor([target_value], dtype=torch.float)
+        if self.target_scaler is not None and not (self.target_key == "E_T" and isinstance(self.target_scaler, dict)):
             target = torch.tensor(
                 self.target_scaler.transform([[target.item()]])[0, 0], dtype=torch.float
             )
@@ -175,9 +197,9 @@ def train_one_epoch(
 def evaluate(
     model: nn.Module,
     test_loader: DataLoader,
-    scalers: Dict[str, StandardScaler],
+    scalers: dict,
     target_key: str,
-    config: Dict[str, Any],
+    config: dict,
 ) -> dict:
     model.eval()
     with torch.no_grad():
@@ -217,12 +239,19 @@ def evaluate(
 
         test_preds = torch.cat(test_preds, dim=0).numpy().flatten()
         test_trues = torch.cat(test_trues, dim=0).numpy().flatten()
-        preds_inv = (
-            scalers[target_key].inverse_transform(test_preds.reshape(-1, 1)).flatten()
-        )
-        trues_inv = (
-            scalers[target_key].inverse_transform(test_trues.reshape(-1, 1)).flatten()
-        )
+        scaler = scalers[target_key]
+        if target_key == "E_T" and isinstance(scaler, dict):
+            preds_inv = np.array([inverse_feature_scaling(pred, target_key, scaler) for pred in test_preds])
+            trues_inv = np.array([inverse_feature_scaling(true, target_key, scaler) for true in test_trues])
+        else:
+            preds_inv = (
+                scaler.inverse_transform(test_preds.reshape(-1, 1)).flatten()
+            )
+            trues_inv = (
+                scaler.inverse_transform(test_trues.reshape(-1, 1)).flatten()
+            )
+            preds_inv = np.array([inverse_feature_scaling(pred, target_key) for pred in preds_inv])
+            trues_inv = np.array([inverse_feature_scaling(true, target_key) for true in trues_inv])
         test_mae = float(np.mean(np.abs(preds_inv - trues_inv)))
         test_avg_attention = (
             np.mean(np.concatenate(test_attention_weights, axis=0), axis=0)
@@ -242,6 +271,16 @@ def safe_float(val):
         return float(val)
     except (TypeError, ValueError):
         return 0.0
+
+
+def apply_feature_scaling(value: float, feature_name: str, minmax: dict = None) -> float:
+    # Revert: just return value, no special scaling for E_T
+    return value
+
+
+def inverse_feature_scaling(value: float, feature_name: str, minmax: dict = None) -> float:
+    # Revert: just return value, no special scaling for E_T
+    return value
 
 
 def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -276,15 +315,31 @@ def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str,
 
                 # --- Normalization ---
                 all_values: Dict[str, np.ndarray] = {}
+                et_minmax = None
                 for key in config["tabular_keys"] + [target_key]:
-                    values = np.array([[safe_float(node.get(key, 0.0))] for node in train_nodes])
+                    # Handle target key mapping for normalization
+                    if key == "E_Form":
+                        data_key = "E_F"  # Use E_F data for E_Form normalization
+                    else:
+                        data_key = key
+                    # Compute min/max for E_T
+                    values_raw = [safe_float(node.get(data_key, 0.0)) for node in train_nodes]
+                    if key == "E_T":
+                        et_minmax = {"min": min(values_raw), "max": max(values_raw)}
+                        values = np.array([[apply_feature_scaling(v, key, et_minmax)] for v in values_raw])
+                    else:
+                        values = np.array([[apply_feature_scaling(v, key)] for v in values_raw])
                     all_values[key] = values
 
                 scalers: Dict[str, StandardScaler] = {}
                 for key, values in all_values.items():
-                    scaler = StandardScaler()
-                    scaler.fit(values)
-                    scalers[key] = scaler
+                    if key == "E_T":
+                        # Don't use StandardScaler for E_T
+                        scalers[key] = et_minmax
+                    else:
+                        scaler = StandardScaler()
+                        scaler.fit(values)
+                        scalers[key] = scaler
 
                 result_dir = os.path.join(
                     "results", f"seed_{seed}", test_id, target_key
@@ -293,8 +348,16 @@ def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str,
 
                 # Save normalization statistics
                 norm_stats = {
-                    "scalers": {
-                        key: {
+                    "scalers": {}
+                }
+                for key, scaler in scalers.items():
+                    if key == "E_T" and isinstance(scaler, dict):
+                        norm_stats["scalers"][key] = {
+                            "min": scaler["min"],
+                            "max": scaler["max"]
+                        }
+                    else:
+                        norm_stats["scalers"][key] = {
                             "mean": scaler.mean_.tolist(),
                             "std": scaler.scale_.tolist(),
                             "range": {
@@ -310,9 +373,6 @@ def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str,
                                 "std": float(scaler.transform(all_values[key]).std()),
                             },
                         }
-                        for key, scaler in scalers.items()
-                    }
-                }
 
                 with open(
                     os.path.join(result_dir, "normalization_stats.json"), "w"
@@ -320,14 +380,18 @@ def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str,
                     json.dump(norm_stats, f, indent=2)
 
                 for key, scaler in scalers.items():
-                    with open(os.path.join(result_dir, f"{key}_scaler.json"), "w") as f:
-                        json.dump(
-                            {
-                                "mean": scaler.mean_.tolist(),
-                                "scale": scaler.scale_.tolist(),
-                            },
-                            f,
-                        )
+                    scaler_path = os.path.join(result_dir, f"{key}_scaler.json")
+                    with open(scaler_path, "w") as f:
+                        if key == "E_T" and isinstance(scaler, dict):
+                            json.dump({"min": scaler["min"], "max": scaler["max"]}, f)
+                        else:
+                            json.dump(
+                                {
+                                    "mean": scaler.mean_.tolist(),
+                                    "scale": scaler.scale_.tolist(),
+                                },
+                                f,
+                            )
 
                 train_dataset = MultiModalDataset(
                     train_nodes,
