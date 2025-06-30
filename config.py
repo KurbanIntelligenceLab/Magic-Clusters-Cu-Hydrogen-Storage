@@ -8,7 +8,7 @@ CONFIG = {
     "scheduler": {"T_0": 100, "T_mult": 2, "eta_min": 1e-6},
     "leave_out_ids": ["R7-H2", "R8-H2", "R9-H2", "R10-H2"],
     "tabular_keys": ["E_H", "E_L", "E_g", "E_f", "E_T", "E_F", "d_Cu-H", "N_cu", "N_h"],
-    "target_keys": ["E_f", "E_Form"],
+    "target_keys": ["E_H", "E_L", "E_g", "E_f", "E_T", "E_Form", "d_Cu-H"],
     "model_params": {
         "tabular_dim": 9,
         "gnn_hidden": 64,
