@@ -5,10 +5,11 @@ networkx
 torch
 torchvision
 torch-geometric
+pyg_lib
+torch_scatter
+torch_sparse
+torch_cluster
+torch_spline_conv
 scikit-learn
 Pillow
 ase
-flake8
-tomli
-black
-isort

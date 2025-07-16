@@ -1,6 +1,5 @@
 results/
 __pycache__/
-wandb/
-.conda
 .DS_Store
 plots/
+venv/

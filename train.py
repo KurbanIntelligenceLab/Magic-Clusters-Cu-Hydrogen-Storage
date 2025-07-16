@@ -283,15 +283,6 @@ def inverse_feature_scaling(value: float, feature_name: str, minmax: dict = None
     return value
 
 
-def apply_feature_scaling(value: float, feature_name: str, minmax: dict = None) -> float:
-    # Revert: just return value, no special scaling for E_T
-    return value
-
-
-def inverse_feature_scaling(value: float, feature_name: str, minmax: dict = None) -> float:
-    # Revert: just return value, no special scaling for E_T
-    return value
-
 def train_and_eval(
     kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str, Any]
 ) -> Dict[str, Any]:
