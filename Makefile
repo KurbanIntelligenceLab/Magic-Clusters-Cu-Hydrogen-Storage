@@ -1,10 +1,10 @@
 lint:
-	conda run -n aclWork flake8 .
+	flake8 .
 
 format:
-	conda run -n aclWork black .
+	black .
 
 isort:
-	conda run -n aclWork isort .
+	isort .
 
 run_ci: format isort lint

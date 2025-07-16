@@ -1,9 +1,12 @@
 [project]
 name = "magic-clusters-cu-hydrogen-storage"
 version = "0.1.0"
-description = "Multimodal Explainable AI Driven Hydrogen Storage Capacity of Copper Magic Clusters: A DFTB Study."
+description = "Multimodal Explainable Artificial Intelligence–Driven Analysis of Quantum Size Effects in Copper Nanoclusters for Hydrogen Storage"
 authors = [
-    { name = "Can Polat", email = "can.polat0@yahoo.com" }
+    { name = "Mustafa Kurban", email = "kurbanm@ankara.edu.tr" },
+    { name = "Can Polat" },
+    { name = "Erchin Serpedin" },
+    { name = "Hasan Kurban", email = "hkurban@hbku.edu.qa" }
 ]
 
 [tool.flake8]

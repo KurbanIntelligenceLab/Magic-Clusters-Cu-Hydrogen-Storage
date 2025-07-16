@@ -244,7 +244,9 @@ def safe_float(val):
         return 0.0
 
 
-def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str, Any]) -> Dict[str, Any]:
+def train_and_eval(
+    kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Train and evaluate the multimodal model using leave-one-out cross-validation.
     Args:
@@ -277,7 +279,9 @@ def train_and_eval(kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str,
                 # --- Normalization ---
                 all_values: Dict[str, np.ndarray] = {}
                 for key in config["tabular_keys"] + [target_key]:
-                    values = np.array([[safe_float(node.get(key, 0.0))] for node in train_nodes])
+                    values = np.array(
+                        [[safe_float(node.get(key, 0.0))] for node in train_nodes]
+                    )
                     all_values[key] = values
 
                 scalers: Dict[str, StandardScaler] = {}
@@ -481,7 +485,7 @@ def main():
             logging.info("Falling back to default CONFIG.")
 
     try:
-        kg_data = load_knowledge_graph("new_data/knowledge_graph.json")
+        kg_data = load_knowledge_graph("data/knowledge_graph.json")
         kg_nodes = kg_data["nodes"]
         kg_edges = kg_data["edges"]
     except Exception as e:

@@ -185,7 +185,7 @@ def process_xyz_file(xyz_path: str, output_dir: str, num_rotations: int = 5):
 
 def main():
     # Define input and output directories
-    base_dir = "new_data"
+    base_dir = "data"
     input_dirs = [
         os.path.join(base_dir, "initial-strcutures"),
         os.path.join(base_dir, "optimized-structures"),
