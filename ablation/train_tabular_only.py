@@ -13,15 +13,12 @@ import torch.optim as optim
 from sklearn.preprocessing import StandardScaler
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from torch.utils.data import DataLoader, Dataset
-from torch_geometric.data import Batch
 from tqdm import tqdm
 
 from config import CONFIG
-from model import MultiModalModel
+from model_tabular_only import TabularOnlyModel
 from utils.data_utils import (
-    load_image,
     load_knowledge_graph,
-    load_xyz_as_pyg_data,
 )
 
 
@@ -45,10 +42,9 @@ def set_seed(seed: int) -> None:
         torch.backends.cudnn.benchmark = False
 
 
-class MultiModalDataset(Dataset):
+class TabularDataset(Dataset):
     """
-    PyTorch Dataset for multimodal data (geometric, image, tabular, target).
-    Optionally masks tabular data for test set.
+    PyTorch Dataset for tabular-only data (tabular features and target).
     """
 
     def __init__(
@@ -56,7 +52,6 @@ class MultiModalDataset(Dataset):
         nodes: List[dict],
         tabular_keys: List[str],
         target_key: str,
-        mask_tabular: bool = False,
         tabular_scaler: Optional[Dict[str, StandardScaler]] = None,
         target_scaler: Optional[StandardScaler] = None,
         exclude_target_for_ids: Optional[List[str]] = None,
@@ -65,7 +60,6 @@ class MultiModalDataset(Dataset):
         self.samples = []
         self.tabular_keys = tabular_keys
         self.target_key = target_key
-        self.mask_tabular = mask_tabular
         self.tabular_scaler = tabular_scaler
         self.target_scaler = target_scaler
         # IDs of nodes that should have ALL target keys excluded from their tabular features
@@ -86,88 +80,68 @@ class MultiModalDataset(Dataset):
     def __getitem__(self, idx: int):
         node = self.samples[idx]["node"]
         rot = self.samples[idx]["rot"]
-        schnet_data = load_xyz_as_pyg_data(rot["xyz_path"])
-        image = load_image(rot["image_path"])
-        if self.mask_tabular:
-            tabular = torch.zeros(len(self.tabular_keys), dtype=torch.float)
-        else:
-            node_id = node.get("id", "")
-            exclude_target = node_id in self.exclude_target_for_ids
-            
-            scaled_features = np.zeros(len(self.tabular_keys))
-            for i, key in enumerate(self.tabular_keys):
-                if exclude_target and key in self.target_keys_mapped:
-                    scaled_features[i] = 0.0
+        
+        # Exclude ALL target keys from tabular features if this node is in exclude list
+        node_id = node.get("id", "")
+        exclude_target = node_id in self.exclude_target_for_ids
+        
+        # Build and scale all tabular features
+        scaled_features = np.zeros(len(self.tabular_keys))
+        for i, key in enumerate(self.tabular_keys):
+            # Skip ALL target keys if this node should exclude them
+            if exclude_target and key in self.target_keys_mapped:
+                scaled_features[i] = 0.0
+            else:
+                value = node.get(key, 0.0)
+                # Apply feature scaling first
+                if key == "E_T" and self.tabular_scaler is not None and isinstance(self.tabular_scaler.get(key), dict):
+                    scaled_value = apply_feature_scaling(value, key, self.tabular_scaler[key])
                 else:
-                    value = node.get(key, 0.0)
-                    if key == "E_T" and self.tabular_scaler is not None and isinstance(self.tabular_scaler.get(key), dict):
-                        scaled_value = apply_feature_scaling(value, key, self.tabular_scaler[key])
-                    else:
-                        scaled_value = apply_feature_scaling(value, key)
-                    
-                    if self.tabular_scaler is not None and key in self.tabular_scaler:
-                        scaler = self.tabular_scaler[key]
-                        if key == "E_T" and isinstance(scaler, dict):
-                            scaled_features[i] = scaled_value
-                        else:
-                            feature_value = np.array([[scaled_value]])
-                            scaled_feature = scaler.transform(feature_value)[0, 0]
-                            scaled_features[i] = scaled_feature
-                    else:
+                    scaled_value = apply_feature_scaling(value, key)
+                
+                # Then apply StandardScaler if available
+                if self.tabular_scaler is not None and key in self.tabular_scaler:
+                    scaler = self.tabular_scaler[key]
+                    if key == "E_T" and isinstance(scaler, dict):
                         scaled_features[i] = scaled_value
-            
-            tabular = torch.tensor(scaled_features, dtype=torch.float)
+                    else:
+                        feature_value = np.array([[scaled_value]])
+                        scaled_feature = scaler.transform(feature_value)[0, 0]
+                        scaled_features[i] = scaled_feature
+                else:
+                    scaled_features[i] = scaled_value
+        
+        tabular = torch.tensor(scaled_features, dtype=torch.float)
+        
         # Handle target key mapping
         if self.target_key == "E_Form":
             target_value = node.get("E_F", 0.0)  # Map E_Form to E_F in data
         else:
             target_value = node.get(self.target_key, 0.0)
+        
         # Apply feature scaling to target
         scaler = self.target_scaler if self.target_scaler is not None else None
         if self.target_key == "E_T" and isinstance(scaler, dict):
             target_value = apply_feature_scaling(target_value, self.target_key, scaler)
         else:
             target_value = apply_feature_scaling(target_value, self.target_key)
+        
         target = torch.tensor([target_value], dtype=torch.float)
         if self.target_scaler is not None and not (self.target_key == "E_T" and isinstance(self.target_scaler, dict)):
             target = torch.tensor(
                 self.target_scaler.transform([[target.item()]])[0, 0], dtype=torch.float
             )
             target = target.reshape(1)
-        return schnet_data, image, tabular, target, node["id"]
+        
+        return tabular, target, node["id"]
 
 
 def collate_fn(batch: List[Any]):
-    """Collate function for DataLoader to batch multimodal data."""
-    schnet_data_list, image_list, tabular_list, target_list = zip(*batch)
-    schnet_batch = Batch.from_data_list(schnet_data_list)
-    image_batch = torch.stack(image_list)
+    """Collate function for DataLoader to batch tabular data."""
+    tabular_list, target_list, node_ids = zip(*batch)
     tabular_x = torch.stack(tabular_list)
     targets = torch.stack(target_list)
-    return schnet_batch, image_batch, tabular_x, targets
-
-
-def collate_fn_with_edges(batch, kg_edges):
-    schnet_data_list, image_list, tabular_list, target_list, node_ids = zip(*batch)
-    schnet_batch = Batch.from_data_list(schnet_data_list)
-    image_batch = torch.stack(image_list)
-    tabular_x = torch.stack(tabular_list)
-    targets = torch.stack(target_list)
-    # Map node ids to batch indices
-    id_to_idx = {nid: i for i, nid in enumerate(node_ids)}
-    # Filter edges for this batch
-    edge_index = []
-    edge_types = []
-    for edge in kg_edges:
-        src, tgt = edge["source"], edge["target"]
-        if src in id_to_idx and tgt in id_to_idx:
-            edge_index.append([id_to_idx[src], id_to_idx[tgt]])
-            edge_types.append(edge.get("type", "unknown"))
-    if edge_index:
-        edge_index = torch.tensor(edge_index, dtype=torch.long).t()
-    else:
-        edge_index = torch.zeros((2, 0), dtype=torch.long)
-    return schnet_batch, image_batch, tabular_x, targets, edge_index, edge_types
+    return tabular_x, targets
 
 
 def train_one_epoch(
@@ -177,32 +151,15 @@ def train_one_epoch(
     loss_fn: nn.Module,
     config: Dict[str, Any],
 ) -> None:
+    """Train the model for one epoch."""
     model.train()
-    for schnet_batch, image_batch, tabular_x, targets, edge_index, _ in train_loader:
-        schnet_batch = schnet_batch.to(config["device"])
-        image_batch = image_batch.to(config["device"])
+    for tabular_x, targets in train_loader:
         tabular_x = tabular_x.to(config["device"])
         targets = targets.to(config["device"])
-        edge_index = edge_index.to(config["device"])
-
-        batch_size = tabular_x.shape[0]
-        if batch_size > 1:
-            edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
-            edge_index = torch.cat([edge_index, edge_index[[1, 0], :]], dim=1)
-        else:
-            edge_index = torch.zeros((2, 0), dtype=torch.long)
-        edge_index = edge_index.to(config["device"])
-        tabular_batch = torch.arange(tabular_x.shape[0], device=config["device"])
 
         optimizer.zero_grad()
-        fusion_out, _, _, _, _ = model(
-            schnet_batch,
-            image_batch,
-            tabular_x,
-            edge_index,
-            tabular_batch,
-        )
-        loss = loss_fn(fusion_out, targets)
+        predictions = model(tabular_x)
+        loss = loss_fn(predictions, targets)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), config["gradient_clip"])
         optimizer.step()
@@ -215,44 +172,21 @@ def evaluate(
     target_key: str,
     config: dict,
 ) -> dict:
+    """Evaluate the model on test set."""
     model.eval()
     with torch.no_grad():
         test_preds, test_trues = [], []
-        test_attention_weights = []
-        for schnet_batch, image_batch, tabular_x, targets, edge_index, _ in test_loader:
-            schnet_batch = schnet_batch.to(config["device"])
-            image_batch = image_batch.to(config["device"])
+        for tabular_x, targets in test_loader:
             tabular_x = tabular_x.to(config["device"])
             targets = targets.to(config["device"])
-            edge_index = edge_index.to(config["device"])
 
-            batch_size = tabular_x.shape[0]
-            if batch_size > 1:
-                edge_index = torch.combinations(torch.arange(batch_size), r=2).t()
-                edge_index = torch.cat([edge_index, edge_index[[1, 0], :]], dim=1)
-            else:
-                edge_index = torch.zeros((2, 0), dtype=torch.long)
-            edge_index = edge_index.to(config["device"])
-            tabular_batch = torch.arange(tabular_x.shape[0], device=config["device"])
-            (
-                fusion_out,
-                _,
-                _,
-                _,
-                attention_weights,
-            ) = model(
-                schnet_batch,
-                image_batch,
-                tabular_x,
-                edge_index,
-                tabular_batch,
-            )
-            test_preds.append(fusion_out.cpu())
+            predictions = model(tabular_x)
+            test_preds.append(predictions.cpu())
             test_trues.append(targets.cpu())
-            test_attention_weights.append(attention_weights.cpu().numpy())
 
         test_preds = torch.cat(test_preds, dim=0).numpy().flatten()
         test_trues = torch.cat(test_trues, dim=0).numpy().flatten()
+        
         scaler = scalers[target_key]
         if target_key == "E_T" and isinstance(scaler, dict):
             preds_inv = np.array([inverse_feature_scaling(pred, target_key, scaler) for pred in test_preds])
@@ -266,21 +200,18 @@ def evaluate(
             )
             preds_inv = np.array([inverse_feature_scaling(pred, target_key) for pred in preds_inv])
             trues_inv = np.array([inverse_feature_scaling(true, target_key) for true in trues_inv])
+        
         test_mae = float(np.mean(np.abs(preds_inv - trues_inv)))
-        test_avg_attention = (
-            np.mean(np.concatenate(test_attention_weights, axis=0), axis=0)
-            if test_attention_weights
-            else None
-        )
+        
         return {
             "preds_inv": preds_inv,
             "trues_inv": trues_inv,
             "mae": test_mae,
-            "attention_weights": test_avg_attention,
         }
 
 
 def safe_float(val):
+    """Safely convert value to float."""
     try:
         return float(val)
     except (TypeError, ValueError):
@@ -288,12 +219,12 @@ def safe_float(val):
 
 
 def apply_feature_scaling(value: float, feature_name: str, minmax: dict = None) -> float:
-    # Revert: just return value, no special scaling for E_T
+    """Apply feature scaling (currently just returns value)."""
     return value
 
 
 def inverse_feature_scaling(value: float, feature_name: str, minmax: dict = None) -> float:
-    # Revert: just return value, no special scaling for E_T
+    """Inverse feature scaling (currently just returns value)."""
     return value
 
 
@@ -301,10 +232,10 @@ def train_and_eval(
     kg_nodes: List[dict], kg_edges: List[dict], config: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Train and evaluate the multimodal model using leave-one-out cross-validation.
+    Train and evaluate the tabular-only model using leave-one-out cross-validation.
     Args:
         kg_nodes: List of knowledge graph nodes.
-        kg_edges: List of knowledge graph edges.
+        kg_edges: List of knowledge graph edges (not used in tabular-only model).
         config: Configuration dictionary.
     Returns:
         Dictionary of results for all seeds and test splits.
@@ -329,7 +260,7 @@ def train_and_eval(
                 ]
                 test_node = [node for node in kg_nodes if node["id"] == test_id][0]
 
-                # --- Normalization ---
+                # --- Normalization for tabular features and target ---
                 all_values: Dict[str, np.ndarray] = {}
                 et_minmax = None
                 for key in config["tabular_keys"] + [target_key]:
@@ -358,7 +289,7 @@ def train_and_eval(
                         scalers[key] = scaler
 
                 result_dir = os.path.join(
-                    "results", f"seed_{seed}", test_id, target_key
+                    "results_tabular_only", f"seed_{seed}", test_id, target_key
                 )
                 os.makedirs(result_dir, exist_ok=True)
 
@@ -409,22 +340,23 @@ def train_and_eval(
                                 f,
                             )
 
-                train_dataset = MultiModalDataset(
+                # Create filtered scalers dict (only for tabular keys we're using)
+                filtered_scalers = {k: scalers[k] for k in config["tabular_keys"] if k in scalers}
+                
+                train_dataset = TabularDataset(
                     train_nodes,
                     config["tabular_keys"],
                     target_key,
-                    mask_tabular=False,
-                    tabular_scaler=scalers,
+                    tabular_scaler=filtered_scalers,
                     target_scaler=scalers[target_key],
                     exclude_target_for_ids=[],
                     target_keys=config["target_keys"],
                 )
-                test_dataset = MultiModalDataset(
+                test_dataset = TabularDataset(
                     [test_node],
                     config["tabular_keys"],
                     target_key,
-                    mask_tabular=True,
-                    tabular_scaler=scalers,
+                    tabular_scaler=filtered_scalers,
                     target_scaler=scalers[target_key],
                     exclude_target_for_ids=[test_id],
                     target_keys=config["target_keys"],
@@ -433,27 +365,21 @@ def train_and_eval(
                     train_dataset,
                     batch_size=config["batch_size"],
                     shuffle=True,
-                    collate_fn=lambda batch: collate_fn_with_edges(batch, kg_edges),
+                    collate_fn=collate_fn,
                 )
                 test_loader = DataLoader(
                     test_dataset,
                     batch_size=config["batch_size"],
                     shuffle=False,
-                    collate_fn=lambda batch: collate_fn_with_edges(batch, kg_edges),
+                    collate_fn=collate_fn,
                 )
 
-                N = len(train_nodes)
-                edge_index = torch.combinations(torch.arange(N), r=2).t()
-                edge_index = torch.cat([edge_index, edge_index[[1, 0], :]], dim=1)
-                edge_index = edge_index.to(config["device"])
-
-                model = MultiModalModel(
-                    **{
-                        **config["model_params"],
-                        "num_targets": 1,
-                        "dropout_rate": config["dropout_rate"],
-                    }
+                model = TabularOnlyModel(
+                    tabular_dim=len(config["tabular_keys"]),
+                    num_targets=1,
+                    dropout_rate=config["dropout_rate"],
                 ).to(config["device"])
+                
                 optimizer = optim.Adam(
                     model.parameters(),
                     lr=config["lr"],
@@ -533,7 +459,7 @@ def train_and_eval(
 def main():
     """Main entry point for training and evaluation."""
     parser = argparse.ArgumentParser(
-        description="Train and evaluate the multimodal model."
+        description="Train and evaluate the tabular-only model."
     )
     parser.add_argument(
         "--config",
@@ -571,6 +497,7 @@ def main():
     except Exception as e:
         logging.error(f"Failed to load knowledge graph: {e}")
         return
+    
     results = train_and_eval(kg_nodes, kg_edges, config)
     logging.info("=== Final Results ===")
     logging.info(json.dumps(results, indent=2))
@@ -578,3 +505,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
